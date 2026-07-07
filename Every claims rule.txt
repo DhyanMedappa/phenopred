@@ -1,0 +1,31 @@
+Every claim in the project must belong to one of these three categories:
+
+Level 1 — Observed
+
+Directly measurable from the raw data.
+
+Example:
+
+Dataset A contains 677,437 rows.
+
+No citation needed.
+
+Level 2 — Derived
+
+Calculated by our pipeline.
+
+Example:
+
+165,393 overlapping RSIDs.
+
+Must be reproducible by our code.
+
+Level 3 — External Knowledge
+
+Comes from biology literature or reference databases.
+
+Example:
+
+rs12913832 is associated with eye color.
+
+Must have a citation (e.g., HirisPlex-S paper, dbSNP, ClinVar, or another peer-reviewed source).
