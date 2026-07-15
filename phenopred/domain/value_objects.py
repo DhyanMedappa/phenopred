@@ -93,3 +93,64 @@ class CommentBlock:
 
     lines: tuple[str, ...]
     count: int
+
+
+@dataclass(frozen=True, slots=True)
+class HeaderInfo:
+    """Reported header form and resolved column names for a single file
+    (FR-3).
+
+    This is a purely descriptive report of what was observed: it names
+    the header's form, the resolved column-name list (when one could be
+    determined), and the exact original line the header was resolved
+    from. It carries no confidence score and performs no validation of
+    its own fields, mirroring EncodingProfile/Delimiter/CommentBlock's
+    purely descriptive, behavior-free design.
+
+    Attributes:
+        form: One of "uncommented_row", "commented_only", or "absent",
+            classifying where (or whether) a header was found.
+        resolved_columns: Ordered column names, split by the file's
+            detected delimiter, from whichever line was identified as
+            the header; None when form is "absent".
+        source_line: The exact, verbatim original line (data line or
+            comment line) identified as the header; None when form is
+            "absent".
+    """
+
+    form: str
+    resolved_columns: tuple[str, ...] | None
+    source_line: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class Finding:
+    """Reported outcome of a single data-quality check over a file's parsed
+    data rows (FR-5 through FR-9).
+
+    This is a purely descriptive record of what a QualityCheck observed.
+    It carries no corrective action or resolution -- only what was found --
+    mirroring EncodingProfile/Delimiter/CommentBlock/HeaderInfo's
+    purely descriptive, behavior-free design.
+
+    Attributes:
+        check_name: A short, stable label identifying which check produced
+            this Finding (e.g. "duplicate_header_check"), supporting
+            per-finding traceability (NFR-6).
+        description: A short, human-readable description of what was
+            checked and found.
+        count: The total number of occurrences found across the full,
+            unsampled data-row collection.
+        examples: A bounded sample (maximum 10 entries) of illustrative
+            examples of the finding, in original row order. Empty when
+            count is 0.
+        affected_row_refs: A bounded sample (maximum 10 entries) of the
+            line_index values of affected rows, in original row order.
+            Empty when count is 0.
+    """
+
+    check_name: str
+    description: str
+    count: int
+    examples: tuple[str, ...]
+    affected_row_refs: tuple[int, ...]
