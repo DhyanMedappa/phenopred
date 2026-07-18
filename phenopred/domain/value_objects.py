@@ -154,3 +154,78 @@ class Finding:
     count: int
     examples: tuple[str, ...]
     affected_row_refs: tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ColumnLayout:
+    """Reported column-role identity for a single file, resolved from its
+    own HeaderInfo (Column Identity Resolution).
+
+    This is a purely descriptive report of which field-position indices
+    correspond to which semantic roles for this file, mirroring
+    EncodingProfile/Delimiter/CommentBlock/HeaderInfo/Finding/
+    ChrPosColumnIndices's identical invariant-free, purely descriptive,
+    behavior-free design. It carries no biological interpretation of
+    column content -- only field-position identity, resolved entirely
+    from this file's own resolved column names (never a fixed,
+    hard-coded schema, per NFR-5/AD-5).
+
+    Fields are restricted to exactly what existing, already-approved
+    consumers require:
+        - DuplicateRsidCheck requires rsid_column_index.
+        - DuplicateChrPosCheck requires chromosome_column_index and
+          position_column_index (via ChrPosColumnIndices).
+        - MissingValueScanner requires designated_column_indices.
+
+    Attributes:
+        rsid_column_index: Field-position index of this file's RSID
+            column.
+        chromosome_column_index: Field-position index of this file's
+            chromosome column.
+        position_column_index: Field-position index of this file's
+            position column.
+        designated_column_indices: Field-position indices of this
+            file's designated genotype/allele column(s), in ascending
+            index order. May be empty when none of the configured
+            designated-column keywords were found among this file's
+            resolved column names.
+    """
+
+    rsid_column_index: int
+    chromosome_column_index: int
+    position_column_index: int
+    designated_column_indices: tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ChrPosColumnIndices:
+    """Reported column identity for a file's chromosome and position
+    fields, as a single, pre-resolved composite key (FR-9).
+
+    This is a purely descriptive container of two named field-position
+    indices, delivered via the QualityCheck interface's context
+    parameter to DuplicateChrPosCheck. It carries no behavior and no
+    construction-time invariant -- mirroring EncodingProfile/Delimiter/
+    CommentBlock/HeaderInfo/Finding's identical invariant-free, purely
+    descriptive design. Per ADR 1 ("Column-Identity Input Contract for
+    DuplicateChrPosCheck"), this value object exists because FR-9 names
+    exactly two fixed, non-interchangeable semantic roles -- chromosome
+    and position -- that a bare int (wrong cardinality), a Sequence[int]
+    (implies interchangeable same-role columns), or a bare tuple[int, int]
+    (no protection against role transposition) could not correctly or
+    safely represent.
+
+    Attributes:
+        chromosome_column_index: A single field-position index
+            identifying this file's chromosome column, already resolved
+            by the caller. Not validated by this value object; bounds-
+            validity per row is DuplicateChrPosCheck's own runtime
+            concern, never this value object's.
+        position_column_index: A single field-position index
+            identifying this file's position column, already resolved
+            by the caller. Not validated by this value object, for the
+            same reason as chromosome_column_index.
+    """
+
+    chromosome_column_index: int
+    position_column_index: int
