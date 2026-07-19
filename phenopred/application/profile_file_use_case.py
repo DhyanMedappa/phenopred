@@ -5,7 +5,10 @@ from phenopred.domain.detection.column_identity_resolver import (
 )
 from phenopred.domain.detection.delimiter_detector import DelimiterNotDetectedError
 from phenopred.domain.errors import PhenoPredIngestionError
-from phenopred.domain.value_objects import ChrPosColumnIndices
+from phenopred.domain.value_objects import (
+    ChrPosColumnIndices,
+    GenotypeChromosomeColumnIndices,
+)
 
 
 class ProfileFileUseCase:
@@ -74,9 +77,10 @@ class ProfileFileUseCase:
         ↓
         Run quality checks
         ↓
-        [genomic profiling / report building: not yet wired --
-         no genomic profiler or report builder implementation exists
-         in the current pipeline configuration]
+        Run genomic profilers
+        ↓
+        [report building: not yet wired -- no report builder
+         implementation exists in the current pipeline configuration]
 
         Args:
             file_path: Path to the single source file to profile.
@@ -101,6 +105,11 @@ class ProfileFileUseCase:
                   ColumnIdentityResolver resolves every column-identity
                   context FR-6/FR-8/FR-9 require before quality checks
                   run.
+                - profiles: dict of profiler_name -> the corresponding
+                  genomic-notation value object (ChromosomeLabelInventory,
+                  GenotypeLayoutProfile, or IndelHaploidProfile), for
+                  every genomic profiler present in the injected
+                  `genomic_profilers` mapping.
 
         Raises:
             PhenoPredIngestionError (or one of its subclasses): if the
@@ -154,6 +163,8 @@ class ProfileFileUseCase:
             data_rows, header_info, column_layout
         )
 
+        profiles = self._run_genomic_profilers(data_rows, column_layout)
+
         return {
             "source_path": raw_content.source_path,
             "encoding_profile": encoding_profile,
@@ -164,6 +175,7 @@ class ProfileFileUseCase:
             "data_rows": data_rows,
             "findings": findings,
             "skipped_quality_checks": skipped_quality_checks,
+            "profiles": profiles,
         }
 
     def _run_quality_checks(self, data_rows, header_info, column_layout):
@@ -226,3 +238,59 @@ class ProfileFileUseCase:
             )
 
         return findings, skipped_quality_checks
+
+    def _run_genomic_profilers(self, data_rows, column_layout):
+        """Run every genomic profiler present in `self._genomic_profilers`,
+        using each profiler's own, already-approved calling contract.
+
+        Args:
+            data_rows: The parsed DataRow collection for this file.
+            column_layout: The already-resolved ColumnLayout for this
+                file (the output of ColumnIdentityResolver), supplying
+                the column-identity context chromosome_label_profiler,
+                genotype_layout_classifier, and indel_haploid_classifier
+                each require.
+
+        Returns:
+            A dict mapping profiler_name -> the corresponding
+            genomic-notation value object, for every genomic profiler
+            present in `self._genomic_profilers`. A profiler absent from
+            `self._genomic_profilers` simply contributes no entry --
+            mirroring `_run_quality_checks`'s identical "only run what's
+            injected" behavior.
+        """
+        profiles = {}
+
+        chromosome_label_profiler = self._genomic_profilers.get(
+            "chromosome_label_profiler"
+        )
+        if chromosome_label_profiler is not None:
+            profiles["chromosome_label_profiler"] = (
+                chromosome_label_profiler.profile(
+                    data_rows, column_layout.chromosome_column_index
+                )
+            )
+
+        genotype_layout_classifier = self._genomic_profilers.get(
+            "genotype_layout_classifier"
+        )
+        if genotype_layout_classifier is not None:
+            profiles["genotype_layout_classifier"] = (
+                genotype_layout_classifier.profile(
+                    data_rows, column_layout.designated_column_indices
+                )
+            )
+
+        indel_haploid_classifier = self._genomic_profilers.get(
+            "indel_haploid_classifier"
+        )
+        if indel_haploid_classifier is not None:
+            profiles["indel_haploid_classifier"] = indel_haploid_classifier.profile(
+                data_rows,
+                GenotypeChromosomeColumnIndices(
+                    designated_column_indices=column_layout.designated_column_indices,
+                    chromosome_column_index=column_layout.chromosome_column_index,
+                ),
+            )
+
+        return profiles

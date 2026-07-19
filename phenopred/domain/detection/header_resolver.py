@@ -54,13 +54,18 @@ the Stage 1 Engineering Review:
   real vendor files (e.g. "# rsid\t..."), not "marker + delimiter +
   content" — so the marker is otherwise inseparable from the header
   keyword by delimiter-splitting alone. This interpretation applies only
-  to comment-line token index 0, is used only to decide whether a match
-  occurred, and never alters what is stored: CommentBlock.lines,
-  source_line, and resolved_columns always reflect the original,
-  unmodified line and its unmodified split tokens. No substring matching,
-  case-folding, or general token cleanup is introduced by this
-  interpretation; a token whose content after the stripped leading run
-  does not exactly equal header_keyword is not a match.
+  to comment-line token index 0. Per ADR-8, the marker-stripped form of
+  that token is also used to construct HeaderInfo.resolved_columns for
+  the commented_only form, so that resolved_columns holds semantic
+  column names (as HeaderInfo's own field contract, and Architecture v1
+  Section 6 step 5, both already specify) rather than a verbatim,
+  marker-prefixed artifact; CommentBlock.lines and source_line are
+  unaffected and always reflect the original, unmodified line. No
+  substring matching, case-folding, or general token cleanup is
+  introduced by this interpretation; a token whose content after the
+  stripped leading run does not exactly equal header_keyword is not a
+  match, and stripping a token with no leading marker run is a no-op
+  (the token is returned unchanged).
 - It never performs row parsing, quality validation, or genomic
   profiling — those are separate FRs implemented by separate modules
   (row_parser, quality_checks, genomic_profiling).
@@ -145,9 +150,25 @@ class HeaderResolver:
             if self._header_keyword in tokens or (
                 tokens and self._marker_stripped_token_matches(tokens[0])
             ):
+                # Per ADR-8: resolved_columns must contain semantic
+                # column names, not verbatim tokens, for the
+                # commented_only form -- source_line (below) remains
+                # the exact, unmodified original comment line
+                # regardless. Only token index 0 is ever affected,
+                # mirroring the marker interpretation's own documented
+                # scope; token 0's marker-stripped form is a no-op
+                # (returns the token unchanged) when no leading marker
+                # run is present, so this applies uniformly and safely
+                # to both matching paths above. Tokens at every other
+                # index are passed through unmodified.
+                semantic_columns = (
+                    (self._strip_marker(tokens[0]), *tokens[1:])
+                    if tokens
+                    else tuple(tokens)
+                )
                 return HeaderInfo(
                     form="commented_only",
-                    resolved_columns=tuple(tokens),
+                    resolved_columns=tuple(semantic_columns),
                     source_line=comment_line,
                 )
 
@@ -171,10 +192,33 @@ class HeaderResolver:
         header_keyword for exact equality only — no substring matching,
         no case-folding, and no further cleanup of the remainder.
         """
+        return self._strip_marker(token) == self._header_keyword
+
+    def _strip_marker(self, token: str) -> str:
+        """Return `token` with a leading comment-marker run and one
+        following run of whitespace disregarded.
+
+        A "marker run" is a leading, contiguous run of characters that
+        are neither alphanumeric nor whitespace (e.g. '#', ';;');
+        stripping stops at the first alphanumeric or whitespace
+        character. Any whitespace immediately following that run is
+        also disregarded. No substring matching, case-folding, or
+        further cleanup of the remainder is performed. A token with no
+        such leading marker run is returned unchanged (stripping is a
+        no-op in that case).
+
+        This method holds the single, shared implementation of the
+        marker-stripping rule: `_marker_stripped_token_matches` uses it
+        to decide whether a comment-line header match occurred, and
+        `detect()` uses it to construct the semantic column name stored
+        in `HeaderInfo.resolved_columns` for the commented_only header
+        form (ADR-8) -- the same stripped value in both cases, computed
+        once, here.
+        """
         index = 0
         length = len(token)
         while index < length and not token[index].isalnum() and not token[index].isspace():
             index += 1
         while index < length and token[index].isspace():
             index += 1
-        return token[index:] == self._header_keyword
+        return token[index:]

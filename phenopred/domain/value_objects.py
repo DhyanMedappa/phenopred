@@ -6,11 +6,16 @@ value objects such as Delimiter, EncodingProfile, ColumnLayout,
 ChromosomeLabelCount, GenotypeLengthDistribution, and MissingValueToken.
 
 EncodingProfile and Delimiter are defined here because they have been
-approved by their respective architecture decisions. The remaining value
-objects belong to modules (header_resolver, quality_checks,
-genomic_profiling) that have not yet been designed or approved; adding
-them ahead of that work would exceed the scope explicitly defined for the
-current module (Stage 1 Engineering Review, Section 7 / Section 16).
+approved by their respective architecture decisions. ChromosomeLabelInventory,
+GenotypeLayoutProfile, IndelHaploidProfile, and
+GenotypeChromosomeColumnIndices are defined here because they have been
+approved by the Genomic Profiling (FR-10-FR-12) Final Architecture Freeze
+(ADR-1 through ADR-7). Any further value object -- including any
+additional genomic-profiling value object not named above -- still
+requires its own recorded architecture decision before being added to
+this module; adding one ahead of that approval would exceed the scope
+explicitly defined for the current module (Stage 1 Engineering Review,
+Section 7 / Section 16).
 """
 
 from __future__ import annotations
@@ -229,3 +234,224 @@ class ChrPosColumnIndices:
 
     chromosome_column_index: int
     position_column_index: int
+
+
+@dataclass(frozen=True, slots=True)
+class ChromosomeLabelInventory:
+    """Reported chromosome-label inventory for a single file, resolved
+    entirely from that file's own observed data (FR-10).
+
+    This is a purely descriptive report of which chromosome label values
+    were observed and how many rows carried each one, mirroring
+    EncodingProfile/Delimiter/CommentBlock/HeaderInfo/Finding/
+    ColumnLayout/ChrPosColumnIndices's identical invariant-free, purely
+    descriptive, behavior-free design. It carries no biological
+    interpretation of any label -- it neither maps, translates, nor
+    reconciles chromosome codes across files (FR-10's own text:
+    "without assuming that chromosome labels are equivalent or directly
+    comparable across files"; RISK-1, RISK-2). Value objects represent
+    required descriptive observations without performing biological
+    interpretation.
+
+    No fixed chromosome-label vocabulary is assumed anywhere in this
+    value object or in the profiler that produces it: every label
+    observed in the file is reported, whatever its form. The
+    implementation should remain robust against unexpected structural
+    variations and should not encode assumptions that are only valid
+    for the two evidence datasets (ADR-6).
+
+    Ordering contract (ADR-4): `label_counts` is ordered by ascending
+    first-observed `DataRow.line_index` -- never by descending count or
+    any other frequency-based ordering. This mirrors the neutral,
+    interpretation-free ordering basis already used elsewhere in this
+    codebase as a deterministic tie-break (e.g. MalformedRowCheck,
+    DuplicateRsidCheck, DuplicateChrPosCheck), and specifically avoids
+    ranking labels by row-count, which would imply an importance
+    judgment this value object has no license to make.
+
+    Attributes:
+        profiler_name: A short, stable label identifying which profiler
+            produced this inventory (e.g. "chromosome_label_profiler"),
+            supporting per-profile traceability (NFR-6), mirroring
+            Finding.check_name's identical purpose.
+        label_counts: Every distinct chromosome label value observed in
+            the file, together with its row count, as an ordered tuple
+            of (label, count) pairs. Ordered by ascending first-observed
+            `DataRow.line_index` per the ordering contract above. Not
+            bounded or sampled -- FR-10 requires enumerating every
+            distinct label observed, so this holds the full, unsampled
+            inventory, unlike Finding.examples/affected_row_refs.
+    """
+
+    profiler_name: str
+    label_counts: tuple[tuple[str, int], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class GenotypeLayoutProfile:
+    """Reported genotype/allele column layout classification and
+    length-distribution observations for a single file (FR-11).
+
+    This is a purely descriptive report of the file's designated
+    genotype/allele column structure, mirroring EncodingProfile/
+    Delimiter/CommentBlock/HeaderInfo/Finding/ColumnLayout/
+    ChrPosColumnIndices/ChromosomeLabelInventory's identical
+    invariant-free, purely descriptive, behavior-free design. It
+    carries no biological interpretation of any observed value, and it
+    does not itself perform column-layout classification or
+    string-length tallying -- both are computed by the producing
+    profiler and merely recorded here. Value objects represent required
+    descriptive observations without performing biological
+    interpretation.
+
+    Classification contract (ADR-5): `layout_kind` is
+    "two_column_allele" if and only if the file's designated-column
+    count is exactly 2, "single_column_genotype" if and only if it is
+    exactly 1, and "undetermined" for every other count, including 0
+    and 3 or more. `column_length_distributions` is computed
+    unconditionally for however many designated columns the file has,
+    fully decoupled from whether `layout_kind` could be assigned -- the
+    descriptive length-distribution data is never withheld on account
+    of an ambiguous or absent layout classification. This value object
+    therefore supports empty designated-column sets and cardinalities
+    beyond the two evidenced layouts without alteration.
+
+    The implementation should remain robust against unexpected
+    structural variations and should not encode assumptions that are
+    only valid for the two evidence datasets (ADR-6): no fixed
+    designated-column count or vendor-specific layout is assumed
+    anywhere in this value object.
+
+    Attributes:
+        profiler_name: A short, stable label identifying which profiler
+            produced this profile (e.g. "genotype_layout_classifier"),
+            supporting per-profile traceability (NFR-6), mirroring
+            Finding.check_name's identical purpose.
+        layout_kind: One of "two_column_allele",
+            "single_column_genotype", or "undetermined", per the
+            classification contract above.
+        column_length_distributions: The observed string-length
+            distribution for each designated column, as an ordered
+            tuple of (designated_column_index, length_distribution)
+            pairs, one entry per designated column, in ascending
+            column-index order. Each length_distribution is itself an
+            ordered tuple of (length, count) pairs, in ascending length
+            order (ADR-4). Computed unconditionally for however many
+            designated columns exist, independent of `layout_kind`.
+    """
+
+    profiler_name: str
+    layout_kind: str
+    column_length_distributions: tuple[
+        tuple[int, tuple[tuple[int, int], ...]], ...
+    ]
+
+
+@dataclass(frozen=True, slots=True)
+class IndelHaploidProfile:
+    """Reported indel-token and haploid/diploid length-classification
+    observations for a single file using a single combined genotype
+    column (FR-12).
+
+    This is a purely descriptive report of configured token occurrences
+    and genotype-length classification on configured sex/mitochondrial
+    chromosome labels, mirroring EncodingProfile/Delimiter/CommentBlock/
+    HeaderInfo/Finding/ColumnLayout/ChrPosColumnIndices/
+    ChromosomeLabelInventory/GenotypeLayoutProfile's identical
+    invariant-free, purely descriptive, behavior-free design.
+    `haploid_count`, `diploid_count`, and `indel_token_counts` are
+    required descriptive classifications named directly by FR-12, not
+    biological conclusions: this value object represents required
+    descriptive observations without performing biological
+    interpretation. It never maps, translates, or reconciles chromosome
+    codes across files (RISK-1, RISK-2), and never asserts biological
+    meaning for any observed token beyond counting its presence,
+    mirroring FR-9's own "without judging the cause" framing.
+
+    Applicability contract: FR-12 applies only to files using a single
+    combined genotype column. `applicable` is False, with every count
+    at zero, when the file's designated-column count is not exactly 1
+    (the two-column-allele case, and any other cardinality) -- this is
+    a legitimate, non-error descriptive outcome, never an exception,
+    mirroring MissingValueScanner's own precedent that an unsupported
+    input shape is reported as a zero-count result, not raised.
+
+    No fixed indel-token vocabulary or chromosome-label vocabulary is
+    assumed anywhere in this value object -- both are supplied by the
+    caller at the producing profiler's construction time (ADR-2,
+    NFR-5). The implementation should remain robust against unexpected
+    structural variations and should not encode assumptions that are
+    only valid for the two evidence datasets (ADR-6).
+
+    Attributes:
+        profiler_name: A short, stable label identifying which profiler
+            produced this profile (e.g. "indel_haploid_classifier"),
+            supporting per-profile traceability (NFR-6), mirroring
+            Finding.check_name's identical purpose.
+        applicable: Whether this file's designated-column count was
+            exactly 1 (single combined genotype column), per the
+            applicability contract above. False for every other
+            cardinality, in which case every other field below is
+            reported at its zero/empty value.
+        indel_token_counts: The observed occurrence count for each
+            configured indel token, as an ordered tuple of
+            (token, count) pairs, ordered by the producing profiler's
+            own constructor-injected token order (ADR-4) -- never by
+            frequency.
+        haploid_count: The total number of rows on a configured
+            sex/mitochondrial chromosome label whose genotype string is
+            single-character.
+        diploid_count: The total number of rows on a configured
+            sex/mitochondrial chromosome label whose genotype string is
+            two-character.
+    """
+
+    profiler_name: str
+    applicable: bool
+    indel_token_counts: tuple[tuple[str, int], ...]
+    haploid_count: int
+    diploid_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class GenotypeChromosomeColumnIndices:
+    """Reported column identity for a file's designated genotype
+    column(s) and chromosome field, as a single, pre-resolved composite
+    context value (FR-12).
+
+    This is a purely descriptive container of two named field-position
+    values, delivered via the GenomicProfiler interface's context
+    parameter to IndelHaploidClassifier. It carries no behavior and no
+    construction-time invariant -- mirroring EncodingProfile/Delimiter/
+    CommentBlock/HeaderInfo/Finding/ColumnLayout/ChrPosColumnIndices's
+    identical invariant-free, purely descriptive design. Per ADR-2, this
+    value object exists because the GenomicProfiler interface exposes a
+    single context parameter, and IndelHaploidClassifier needs two
+    distinct pieces of column-identity context -- bundling them here
+    follows the same minimal value-object approach used elsewhere in
+    the codebase, keeping the profiler from having to accept the entire
+    ColumnLayout (which would expose fields, such as
+    rsid_column_index, it has no business touching). This is not a
+    role-transposition safeguard -- ChrPosColumnIndices exists for that
+    distinct reason -- since designated_column_indices and
+    chromosome_column_index are differently typed and cannot be
+    silently swapped for one another.
+
+    Attributes:
+        designated_column_indices: This file's already-resolved
+            designated genotype/allele column field-position indices,
+            already resolved by the caller (i.e. copied from
+            ColumnLayout.designated_column_indices). Not validated by
+            this value object; interpreting its cardinality (e.g.
+            confirming it is exactly 1) is IndelHaploidClassifier's own
+            runtime concern, never this value object's.
+        chromosome_column_index: A single field-position index
+            identifying this file's chromosome column, already resolved
+            by the caller (i.e. copied from
+            ColumnLayout.chromosome_column_index). Not validated by
+            this value object, for the same reason as
+            designated_column_indices.
+    """
+
+    designated_column_indices: tuple[int, ...]
+    chromosome_column_index: int

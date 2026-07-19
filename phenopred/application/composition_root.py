@@ -58,6 +58,15 @@ from phenopred.domain.detection.column_identity_resolver import (
 from phenopred.domain.detection.delimiter_detector import DelimiterDetector
 from phenopred.domain.detection.encoding_detector import EncodingDetector
 from phenopred.domain.detection.header_resolver import HeaderResolver
+from phenopred.domain.genomic_profiling.chromosome_label_profiler import (
+    ChromosomeLabelProfiler,
+)
+from phenopred.domain.genomic_profiling.genotype_layout_classifier import (
+    GenotypeLayoutClassifier,
+)
+from phenopred.domain.genomic_profiling.indel_haploid_classifier import (
+    IndelHaploidClassifier,
+)
 from phenopred.domain.ingestion.raw_line_splitter import RawLineSplitter
 from phenopred.domain.ingestion.row_parser import RowParser
 from phenopred.domain.quality_checks.duplicate_chr_pos_check import (
@@ -95,6 +104,8 @@ _DEFAULT_DESIGNATED_COLUMN_KEYWORDS: tuple[str, ...] = (
     "allele2",
     "genotype",
 )
+_DEFAULT_INDEL_TOKENS: tuple[str, ...] = ("II", "DD", "DI")
+_DEFAULT_SEX_MITOCHONDRIAL_LABELS: tuple[str, ...] = ("X", "Y", "MT")
 
 
 def build_profile_file_use_case(
@@ -107,6 +118,8 @@ def build_profile_file_use_case(
     chromosome_keyword: str = _DEFAULT_CHROMOSOME_KEYWORD,
     position_keyword: str = _DEFAULT_POSITION_KEYWORD,
     designated_column_keywords: Sequence[str] = _DEFAULT_DESIGNATED_COLUMN_KEYWORDS,
+    indel_tokens: Sequence[str] = _DEFAULT_INDEL_TOKENS,
+    sex_mitochondrial_labels: Sequence[str] = _DEFAULT_SEX_MITOCHONDRIAL_LABELS,
 ) -> ProfileFileUseCase:
     """Construct and wire the Stage 1 application object graph.
 
@@ -127,6 +140,9 @@ def build_profile_file_use_case(
         chromosome_keyword: Injected into ColumnIdentityResolver.
         position_keyword: Injected into ColumnIdentityResolver.
         designated_column_keywords: Injected into ColumnIdentityResolver.
+        indel_tokens: Injected into IndelHaploidClassifier (FR-12).
+        sex_mitochondrial_labels: Injected into IndelHaploidClassifier
+            (FR-12).
 
     Returns:
         A fully constructed ProfileFileUseCase, with every Stage 1
@@ -144,14 +160,12 @@ def build_profile_file_use_case(
               duplicate_rsid_check, duplicate_chr_pos_check), matching
               the check names ProfileFileUseCase's own docstring
               already documents it expects.
-            - genomic_profilers: an empty tuple. Genomic profiling
-              (FR-10..FR-12) is out of Stage 1 scope; no
-              GenomicProfiler implementation exists in this repository
-              to construct. An empty collection is the smallest value
-              compatible with ProfileFileUseCase's existing,
-              unmodified constructor -- it is never iterated or
-              otherwise acted upon by the current, frozen
-              ProfileFileUseCase.execute() implementation.
+            - genomic_profilers: a name-keyed mapping containing all
+              three FR-10..FR-12 genomic profilers
+              (chromosome_label_profiler, genotype_layout_classifier,
+              indel_haploid_classifier), matching the profiler names
+              ProfileFileUseCase's `_run_genomic_profilers` method
+              already looks up.
             - report_builder: None. Reporting is out of Stage 1 scope;
               no ReportBuilder implementation exists in this
               repository to construct. None is the smallest value
@@ -173,12 +187,25 @@ def build_profile_file_use_case(
     )
     row_parser = RowParser()
 
+    chromosome_label_profiler = ChromosomeLabelProfiler()
+    genotype_layout_classifier = GenotypeLayoutClassifier()
+    indel_haploid_classifier = IndelHaploidClassifier(
+        indel_tokens=indel_tokens,
+        sex_mitochondrial_labels=sex_mitochondrial_labels,
+    )
+
     quality_checks = {
         "malformed_row_check": MalformedRowCheck(),
         "duplicate_header_check": DuplicateHeaderCheck(),
         "missing_value_scanner": MissingValueScanner(),
         "duplicate_rsid_check": DuplicateRsidCheck(),
         "duplicate_chr_pos_check": DuplicateChrPosCheck(),
+    }
+
+    genomic_profilers = {
+        "chromosome_label_profiler": chromosome_label_profiler,
+        "genotype_layout_classifier": genotype_layout_classifier,
+        "indel_haploid_classifier": indel_haploid_classifier,
     }
 
     return ProfileFileUseCase(
@@ -190,6 +217,6 @@ def build_profile_file_use_case(
         column_identity_resolver=column_identity_resolver,
         row_parser=row_parser,
         quality_checks=quality_checks,
-        genomic_profilers=(),
+        genomic_profilers=genomic_profilers,
         report_builder=None,
     )
