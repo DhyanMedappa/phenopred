@@ -281,9 +281,16 @@ def test_malformed_row_check_never_imports_upstream_or_sibling_modules() -> None
         "raw_line_splitter",
         "delimiter_detector",
         "header_resolver",
+        "column_identity_resolver",
         "row_parser",
         "report_builder",
         "duplicate_header_check",
+        "missing_value_scanner",
+        "duplicate_rsid_check",
+        "duplicate_chr_pos_check",
+        "chromosome_label_profiler",
+        "genotype_layout_classifier",
+        "indel_haploid_classifier",
         "interfaces",
     ]
     for name in imported:

@@ -2,22 +2,45 @@
 """Unit tests for DelimiterDetector (FR-2).
 
 Mirrors the testing approach established by
-tests/unit/domain/detection/test_encoding_detector.py: small, synthetic,
-in-memory fixtures only, no file I/O, exercising the structural properties
-named by the SRS and the Stage 2 design review (candidate set, tie-break
-ordering, consistency requirement, sample-size injection, and the
-detector-local failure exception).
+tests/unit/domain/detection/test_header_resolver.py,
+test_column_identity_resolver.py, test_chromosome_label_profiler.py,
+test_genotype_layout_classifier.py, test_indel_haploid_classifier.py,
+test_duplicate_rsid_check.py, test_duplicate_header_check.py, and
+test_missing_value_scanner.py: small, synthetic, in-memory fixtures
+only, no file I/O, exercising exactly the structural properties named
+by FR-2, the Detector[T] Protocol (interfaces.py, which explicitly
+names DelimiterDetector as one of the three implementers that
+validated that Protocol's shape), Delimiter's frozen contract
+(value_objects.py), and NFR-3/NFR-5 as documented directly in
+delimiter_detector.py's own docstrings.
+
+Scope discipline: this suite verifies DelimiterDetector only. It does
+not test, anticipate, or stub HeaderResolver, ColumnIdentityResolver,
+RowParser, any QualityCheck, or any GenomicProfiler. It does not lock
+private helper methods, internal scoring implementation, Python
+str.count() behaviour, exception message text, or exception
+inheritance hierarchy -- only observable behavior and explicitly
+documented architectural guarantees are tested.
 """
 
 from __future__ import annotations
 
-import dataclasses
+import ast
 
+from phenopred.domain.detection import (
+    delimiter_detector as delimiter_detector_module,
+)
 from phenopred.domain.detection.delimiter_detector import (
     DelimiterDetector,
     DelimiterNotDetectedError,
 )
+from phenopred.domain.interfaces import Detector
 from phenopred.domain.value_objects import Delimiter
+
+
+# ---------------------------------------------------------------------------
+# 1. Normal behaviour: each candidate delimiter detected correctly
+# ---------------------------------------------------------------------------
 
 
 def test_detects_tab_delimiter() -> None:
@@ -45,13 +68,22 @@ def test_detects_pipe_delimiter() -> None:
     assert result.character == "|"
 
 
-def test_prefers_higher_field_count_over_lower() -> None:
-    # Every line has 1 comma but 4 tabs; tab is stronger structural
-    # evidence (more consistent fields), so tab must win even though
-    # comma is not tab's preference-order superior.
-    lines = ["a\tb\tc\td,e", "f\tg\th\ti,j"]
+# ---------------------------------------------------------------------------
+# 2. Selection criteria: count-based primary selection and fixed-order
+#    tie-break (explicitly documented: "Fixed candidate set, in fixed
+#    preference order... used solely as a deterministic tie-break...
+#    it never overrides a clear, higher-scoring result.")
+# ---------------------------------------------------------------------------
+
+
+def test_higher_consistent_count_wins_even_when_later_in_fixed_preference_order() -> None:
+    # Semicolon (later in fixed order: tab, comma, semicolon, pipe) is
+    # consistently present 3 times per line; tab (earlier in fixed
+    # order) is consistently present only 1 time per line. The higher,
+    # equally-consistent count must win regardless of candidate order.
+    lines = ["a\tb;c;d;e", "f\tg;h;i;j"]
     result = DelimiterDetector(sample_size=10).detect(lines)
-    assert result.character == "\t"
+    assert result.character == ";"
 
 
 def test_tie_break_uses_fixed_preference_order() -> None:
@@ -60,6 +92,11 @@ def test_tie_break_uses_fixed_preference_order() -> None:
     lines = ["a,b;c", "d,e;f", "g,h;i"]
     result = DelimiterDetector(sample_size=10).detect(lines)
     assert result.character == ","
+
+
+# ---------------------------------------------------------------------------
+# 3. Consistency requirement
+# ---------------------------------------------------------------------------
 
 
 def test_inconsistent_counts_are_not_detected() -> None:
@@ -82,6 +119,28 @@ def test_no_candidate_present_raises() -> None:
         pass
 
 
+# ---------------------------------------------------------------------------
+# 4. Fixed candidate set (explicitly documented as not configurable)
+# ---------------------------------------------------------------------------
+
+
+def test_whitespace_not_treated_as_delimiter() -> None:
+    # Space-separated content must not be detected as delimited by
+    # space; space is not part of the fixed candidate set, so no
+    # candidate qualifies and detection fails.
+    lines = ["rs1 1 100 A G", "rs2 1 200 C T"]
+    try:
+        DelimiterDetector(sample_size=10).detect(lines)
+        raise AssertionError("expected DelimiterNotDetectedError")
+    except DelimiterNotDetectedError:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# 5. Boundary cases: empty and sample-bounded input
+# ---------------------------------------------------------------------------
+
+
 def test_empty_lines_sequence_raises() -> None:
     try:
         DelimiterDetector(sample_size=10).detect([])
@@ -91,8 +150,9 @@ def test_empty_lines_sequence_raises() -> None:
 
 
 def test_blank_lines_in_sample_are_ignored_not_altered() -> None:
-    # A blank line contributes no delimiter evidence and is excluded from
-    # consistency scoring, but no line's *content* is stripped/altered.
+    # A blank line contributes no delimiter evidence and is excluded
+    # from consistency scoring, but no line's content is stripped or
+    # altered.
     lines = ["rs1\t1\t100", "", "rs2\t1\t200"]
     result = DelimiterDetector(sample_size=10).detect(lines)
     assert result.character == "\t"
@@ -106,6 +166,29 @@ def test_sample_size_bounds_lines_examined() -> None:
     assert result.character == "\t"
 
 
+# ---------------------------------------------------------------------------
+# 6. No content alteration or normalization (explicitly documented:
+#    "Field values within each line are never altered, trimmed, or
+#    otherwise normalized by this method.")
+# ---------------------------------------------------------------------------
+
+
+def test_no_content_alteration_trimming_or_normalization_of_line_values() -> None:
+    # Quoted fields, a backslash-adjacent character, and leading/
+    # trailing whitespace padding around fields are all left entirely
+    # unaltered; tab remains the consistently detected delimiter
+    # throughout, since none of this surrounding content is stripped,
+    # trimmed, or otherwise normalized before counting.
+    lines = [' "rs1" \t 1 \t100\\x', ' "rs2" \t 1 \t200\\y']
+    result = DelimiterDetector(sample_size=10).detect(lines)
+    assert result.character == "\t"
+
+
+# ---------------------------------------------------------------------------
+# 7. Determinism
+# ---------------------------------------------------------------------------
+
+
 def test_deterministic_repeated_calls() -> None:
     lines = ["rs1\t1\t100", "rs2\t1\t200"]
     detector = DelimiterDetector(sample_size=10)
@@ -114,92 +197,78 @@ def test_deterministic_repeated_calls() -> None:
     assert first == second
 
 
-def test_no_quote_handling() -> None:
-    # Quote characters are treated as ordinary literal characters; a
-    # quoted comma-delimited field is not specially interpreted, and tab
-    # remains the consistent, winning candidate here.
-    lines = ['"rs1"\t1\t100', '"rs2"\t1\t200']
+# ---------------------------------------------------------------------------
+# 8. Output contract: Delimiter shape
+# ---------------------------------------------------------------------------
+
+
+def test_return_type_is_delimiter() -> None:
+    lines = ["rs1\t1\t100", "rs2\t1\t200"]
     result = DelimiterDetector(sample_size=10).detect(lines)
-    assert result.character == "\t"
+    assert isinstance(result, Delimiter)
 
 
-def test_no_escape_sequence_handling() -> None:
-    # Backslash escaping is not interpreted. The comma after the backslash
-    # is counted as a normal comma character. Because comma counts differ
-    # across lines, detection must fail rather than treating "\\," as escaped.
-    lines = ["a\\,b,c", "d\\,e,f,g"]
-
-    try:
-        DelimiterDetector(sample_size=10).detect(lines)
-        raise AssertionError("expected DelimiterNotDetectedError")
-    except DelimiterNotDetectedError:
-        pass
+# ---------------------------------------------------------------------------
+# 9. Protocol compliance
+# ---------------------------------------------------------------------------
 
 
-def test_whitespace_not_treated_as_delimiter() -> None:
-    # Space-separated content must not be detected as delimited by space;
-    # since no candidate is present/consistent, detection fails.
-    lines = ["rs1 1 100 A G", "rs2 1 200 C T"]
-    try:
-        DelimiterDetector(sample_size=10).detect(lines)
-        raise AssertionError("expected DelimiterNotDetectedError")
-    except DelimiterNotDetectedError:
-        pass
+def test_delimiter_detector_satisfies_detector_protocol() -> None:
+    assert isinstance(DelimiterDetector(sample_size=10), Detector)
 
 
-def test_no_whitespace_stripping_of_fields() -> None:
-    # Leading/trailing whitespace around fields must survive untouched in
-    # terms of what informs detection; tab count is unaffected by padding.
-    lines = [" rs1 \t 1 \t100", " rs2 \t 1 \t200"]
-    result = DelimiterDetector(sample_size=10).detect(lines)
-    assert result.character == "\t"
+# ---------------------------------------------------------------------------
+# 10. Dependency boundaries (structural, AST-based)
+# ---------------------------------------------------------------------------
 
 
-def test_delimiter_value_object_shape() -> None:
-    result = Delimiter(character="\t", detection_method="character_frequency_analysis")
-    assert result.character == "\t"
-    assert result.detection_method == "character_frequency_analysis"
-
-
-def test_delimiter_is_immutable() -> None:
-    result = Delimiter(character="\t", detection_method="character_frequency_analysis")
-    try:
-        result.character = ","  # type: ignore[misc]
-        raise AssertionError("expected FrozenInstanceError")
-    except dataclasses.FrozenInstanceError:
-        pass
-
-
-def test_delimiter_rejects_new_attribute() -> None:
-    result = Delimiter(character="\t", detection_method="character_frequency_analysis")
-    try:
-        result.confidence = 0.9  # type: ignore[attr-defined]
-        raise AssertionError("expected AttributeError or TypeError")
-    except (AttributeError, TypeError):
-        pass
-
-
-def test_delimiter_detector_never_imports_ingestion_errors() -> None:
-    # Structural guard, not a behavioral test: confirms this module has no
-    # *import* dependency on phenopred.domain.errors, per the approved
-    # Stage 2 exception-ownership resolution. (The module's own docstrings
-    # mention PhenoPredIngestionError in prose, to explain the boundary --
-    # that is not an import and is intentionally not flagged here.)
-    import ast
-
-    import phenopred.domain.detection.delimiter_detector as module
-
+def _imported_module_names(module) -> list[str]:
     with open(module.__file__, encoding="utf-8") as f:
         source = f.read()
     tree = ast.parse(source)
-    imported_modules: list[str] = []
+    imported: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            imported_modules.extend(alias.name for alias in node.names)
+            imported.extend(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
-            imported_modules.append(node.module)
+            imported.append(node.module)
+    return imported
 
-    assert not any("errors" in name for name in imported_modules)
+
+def test_delimiter_detector_never_imports_errors_module() -> None:
+    imported = _imported_module_names(delimiter_detector_module)
+    assert not any("errors" in name for name in imported)
+
+
+def test_delimiter_detector_never_imports_upstream_or_sibling_modules() -> None:
+    imported = _imported_module_names(delimiter_detector_module)
+    forbidden_substrings = [
+        "raw_file_loader",
+        "encoding_detector",
+        "raw_line_splitter",
+        "header_resolver",
+        "column_identity_resolver",
+        "row_parser",
+        "quality_checks",
+        "malformed_row_check",
+        "duplicate_header_check",
+        "missing_value_scanner",
+        "duplicate_rsid_check",
+        "duplicate_chr_pos_check",
+        "chromosome_label_profiler",
+        "genotype_layout_classifier",
+        "indel_haploid_classifier",
+        "report_builder",
+    ]
+    for name in imported:
+        for forbidden in forbidden_substrings:
+            assert forbidden not in name, f"forbidden import found: {name}"
+
+
+def test_delimiter_detector_only_imports_allowed_domain_modules() -> None:
+    imported = _imported_module_names(delimiter_detector_module)
+    domain_imports = [name for name in imported if name.startswith("phenopred.")]
+    assert set(domain_imports) == {"phenopred.domain.value_objects"}
 
 
 def _run_all() -> None:

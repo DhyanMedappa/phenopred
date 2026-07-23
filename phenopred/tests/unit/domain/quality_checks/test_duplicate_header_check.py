@@ -53,14 +53,14 @@ def test_single_duplicate_header_row_detected() -> None:
 def test_duplicate_header_matches_commented_only_form() -> None:
     header_info = HeaderInfo(
         form="commented_only",
-        resolved_columns=("# rsid", "chromosome", "position", "genotype"),
+        resolved_columns=("rsid", "chromosome", "position", "genotype"),
         source_line="# rsid\tchromosome\tposition\tgenotype",
     )
     rows = (
         DataRow(line_index=0, fields=("rs1", "1", "100", "AG")),
         DataRow(
             line_index=1,
-            fields=("# rsid", "chromosome", "position", "genotype"),
+            fields=("rsid", "chromosome", "position", "genotype"),
         ),
     )
     finding = DuplicateHeaderCheck().check(rows, header_info)
@@ -367,6 +367,7 @@ def test_duplicate_header_check_never_imports_upstream_modules() -> None:
         "raw_line_splitter",
         "delimiter_detector",
         "header_resolver",
+        "column_identity_resolver",
         "row_parser",
     ]
     for name in imported:

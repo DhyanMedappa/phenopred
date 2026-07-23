@@ -363,6 +363,7 @@ def test_missing_value_scanner_never_imports_upstream_or_sibling_modules() -> No
         "raw_line_splitter",
         "delimiter_detector",
         "header_resolver",
+        "column_identity_resolver",
         "row_parser",
         "report_builder",
         "duplicate_header_check",

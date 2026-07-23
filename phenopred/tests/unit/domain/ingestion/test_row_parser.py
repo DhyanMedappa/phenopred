@@ -2,16 +2,20 @@
 """Unit tests for RowParser (FR-4).
 
 Mirrors the testing approach established by test_delimiter_detector.py,
-test_raw_line_splitter.py, and test_header_resolver.py: small, synthetic,
-in-memory fixtures only, no file I/O, exercising exactly the structural
-properties named by the frozen RowParser design specification.
+test_column_identity_resolver.py, and test_header_resolver.py: small,
+synthetic, in-memory fixtures only, no file I/O, exercising exactly the
+structural properties named by the frozen RowParser design
+specification.
 
 Scope discipline: this suite verifies RowParser and its interaction with
-DataRow/Delimiter only. It does not test, anticipate, or stub any future
+DataRow/Delimiter only. It does not test, anticipate, or stub any other
 module (MalformedRowCheck, MissingValueScanner, HeaderResolver's header-
-exclusion hand-off, etc.). Per the frozen specification's own instruction,
-no test is written for the manually-constructed-invalid-Delimiter case,
-since the specification explicitly leaves that behavior undefined.
+exclusion hand-off, etc.). Per the frozen specification's own
+instruction, no test is written for the manually-constructed-invalid-
+Delimiter case, since the specification explicitly leaves that behavior
+undefined. RowParser has no dataset-specific knowledge of any kind; test
+names and fixtures avoid implying awareness of any particular vendor
+file layout.
 """
 
 from __future__ import annotations
@@ -89,7 +93,7 @@ def test_pipe_delimiter() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 4. Normal behavior: tuple return type
+# 4. Normal behavior: tuple return type and generic field-count parsing
 # ---------------------------------------------------------------------------
 
 
@@ -100,14 +104,14 @@ def test_return_type_is_tuple_of_data_row() -> None:
     assert all(isinstance(row, DataRow) for row in result)
 
 
-def test_five_column_layout_dataset_a_style() -> None:
+def test_five_field_lines_parse_to_five_element_fields_tuples() -> None:
     delimiter = Delimiter(character="\t", detection_method="character_frequency_analysis")
     lines = ["rs1\t1\t100\tA\tG", "rs2\t1\t200\tC\tT"]
     result = RowParser().parse(lines, delimiter)
     assert all(len(row.fields) == 5 for row in result)
 
 
-def test_four_column_layout_dataset_b_style() -> None:
+def test_four_field_lines_parse_to_four_element_fields_tuples() -> None:
     delimiter = Delimiter(character="\t", detection_method="character_frequency_analysis")
     lines = ["rs1\t1\t100\tAG", "rs2\t1\t200\t--"]
     result = RowParser().parse(lines, delimiter)
@@ -141,8 +145,7 @@ def test_no_case_or_unicode_normalization() -> None:
 
 def test_no_interpretation_of_missing_value_tokens() -> None:
     # RowParser must not recognize or transform documented missing-value
-    # tokens (e.g. Dataset A's literal '0', Dataset B's '--'); they pass
-    # through as ordinary, unmodified field strings.
+    # tokens; they pass through as ordinary, unmodified field strings.
     delimiter = Delimiter(character="\t", detection_method="character_frequency_analysis")
     result = RowParser().parse(["rs1\t1\t100\t0\t--"], delimiter)
     assert result[0].fields == ("rs1", "1", "100", "0", "--")
@@ -233,7 +236,7 @@ def test_row_parser_never_imports_ingestion_errors() -> None:
     assert not any("errors" in name for name in imported)
 
 
-def test_row_parser_never_imports_upstream_modules() -> None:
+def test_row_parser_never_imports_upstream_or_sibling_modules() -> None:
     imported = _imported_module_names(row_parser_module)
     forbidden_substrings = [
         "raw_file_loader",
@@ -241,6 +244,17 @@ def test_row_parser_never_imports_upstream_modules() -> None:
         "raw_line_splitter",
         "delimiter_detector",
         "header_resolver",
+        "column_identity_resolver",
+        "quality_checks",
+        "malformed_row_check",
+        "duplicate_header_check",
+        "missing_value_scanner",
+        "duplicate_rsid_check",
+        "duplicate_chr_pos_check",
+        "chromosome_label_profiler",
+        "genotype_layout_classifier",
+        "indel_haploid_classifier",
+        "report_builder",
     ]
     for name in imported:
         for forbidden in forbidden_substrings:
@@ -286,8 +300,8 @@ def test_empty_string_line_yields_single_empty_field() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Additional required properties: line_index assignment, determinism,
-# non-mutation of caller input
+# 9. Additional required properties: line_index assignment, determinism,
+#    non-mutation of caller input
 # ---------------------------------------------------------------------------
 
 
@@ -313,13 +327,6 @@ def test_input_lines_sequence_is_not_mutated() -> None:
     original_copy = list(lines)
     RowParser().parse(lines, delimiter)
     assert lines == original_copy
-
-
-def test_no_mutation_when_input_is_a_tuple() -> None:
-    delimiter = Delimiter(character="\t", detection_method="character_frequency_analysis")
-    lines = ("a\tb", "c\td")
-    RowParser().parse(lines, delimiter)
-    assert lines == ("a\tb", "c\td")
 
 
 def _run_all() -> None:

@@ -389,6 +389,7 @@ def test_duplicate_rsid_check_never_imports_upstream_or_sibling_modules() -> Non
         "raw_line_splitter",
         "delimiter_detector",
         "header_resolver",
+        "column_identity_resolver",
         "row_parser",
         "report_builder",
         "duplicate_header_check",

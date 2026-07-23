@@ -533,6 +533,7 @@ def test_duplicate_chr_pos_check_never_imports_upstream_or_sibling_modules() -> 
         "raw_line_splitter",
         "delimiter_detector",
         "header_resolver",
+        "column_identity_resolver",
         "row_parser",
         "report_builder",
         "duplicate_header_check",
