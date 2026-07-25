@@ -3,12 +3,21 @@
 detectors, checks, profilers, and serializers (Architecture v1, Section
 4 / Section 10).
 
-Detector[T], a provisional QualityCheck port, and a provisional
-GenomicProfiler port are defined here. GenomicProfiler was approved by
-the Genomic Profiling (FR-10-FR-12) Final Architecture Freeze (ADR-1).
-ReportSerializer and ConfigProvider belong to modules that have not yet
-been designed or approved; adding them ahead of that work would exceed
-the scope explicitly defined for the current module (Stage 1 Engineering
+Detector[T], a provisional QualityCheck port, a provisional
+GenomicProfiler port, and ReportSerializer are defined here.
+GenomicProfiler was approved by the Genomic Profiling (FR-10-FR-12)
+Final Architecture Freeze (ADR-1). ReportSerializer is approved by the
+Report Persistence design step (Architecture v1 Section 3/9/10, AD-3):
+Section 10's interface table names it directly ("Given a
+ProfilingReport, persist it as an artifact and return a reference to
+it. Implemented by JsonReportSerializer") and Section 9 names its sole
+Version 1 implementer's location (infrastructure/io/report_writer.py),
+so, unlike ConfigProvider, its shape is not an open design question --
+it is added here now, mirroring Detector[T]/QualityCheck/
+GenomicProfiler's identical minimal, single-method, data-in/data-out
+shape. ConfigProvider still belongs to a module that has not yet been
+designed or approved; adding it ahead of that work would exceed the
+scope explicitly defined for the current module (Stage 1 Engineering
 Review, Section 7 / Section 16).
 
 QualityCheck's shape below is PROVISIONAL. It is validated against
@@ -133,5 +142,45 @@ class GenomicProfiler(Protocol):
         IndelHaploidProfile) -- never a shared Profile type; this
         Protocol only fixes the single-method, data-in/data-out shape,
         mirroring Detector[T] and QualityCheck.
+        """
+        ...
+
+
+@runtime_checkable
+class ReportSerializer(Protocol):
+    """A port for components that persist a ProfilingReport to a
+    concrete artifact and return a reference to it (Architecture v1,
+    Section 10: "Given a ProfilingReport, persist it as an artifact and
+    return a reference to it").
+
+    Kept minimal and single-method (data-in/data-out), mirroring
+    Detector[T], QualityCheck, and GenomicProfiler. Unlike those three
+    ports, every concrete implementation of this one necessarily
+    performs file I/O (Section 3's Layered Architecture table:
+    Infrastructure is the only layer with I/O) -- but this Protocol
+    itself still lives in the domain layer and fixes only the
+    interface contract, never how or where persistence happens, or
+    what concrete artifact format is produced. Per AD-3, the domain
+    layer never depends on a concrete serialization format; only the
+    infrastructure-layer implementer (JsonReportSerializer, Version
+    1's sole implementer, per Section 9/10) makes that choice.
+
+    This Protocol defines no persistence logic, path-resolution rule,
+    or artifact-format decision of its own -- how `report` is converted
+    and where it is written is exclusively each concrete implementer's
+    responsibility.
+    """
+
+    def serialize(self, report: object, output_path: object) -> object:
+        """Persist `report` to `output_path` and return a reference to
+        the produced artifact.
+
+        Concrete implementations narrow `report` to ProfilingReport,
+        narrow `output_path` to their own accepted path type (e.g. a
+        `pathlib.Path` or `str`), and narrow the return type to
+        whatever reference type is most useful to their caller (e.g.
+        the same `output_path`, echoed back once writing succeeds).
+        This Protocol only fixes the single-method, data-in/data-out
+        shape, mirroring Detector[T], QualityCheck, and GenomicProfiler.
         """
         ...

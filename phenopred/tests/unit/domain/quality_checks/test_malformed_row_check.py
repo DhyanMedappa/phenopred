@@ -9,9 +9,11 @@ Specification and the frozen Architecture Decision Record resolving
 Deferred Decision B.4 ("first observed column count wins, using ascending
 DataRow.line_index ordering").
 
-Scope discipline: this suite verifies MalformedRowCheck's interaction
-with DataRow/Finding only. It does not test, anticipate, or stub
-ColumnCountDistribution, ReportBuilder, or any other deferred component.
+Scope discipline: this suite verifies MalformedRowCheck's own two
+public outputs -- check() (Finding) and column_count_distribution()
+(ColumnCountDistribution) -- and their interaction with DataRow only.
+It does not test, anticipate, or stub ReportBuilder, OpenQuestionRegistry,
+or any other component downstream of this check.
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ from phenopred.domain.quality_checks import (
 from phenopred.domain.quality_checks.malformed_row_check import (
     MalformedRowCheck,
 )
-from phenopred.domain.value_objects import Finding
+from phenopred.domain.value_objects import ColumnCountDistribution, Finding
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +253,107 @@ def test_data_row_instances_are_not_mutated() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 7. Dependency boundaries (structural, AST-based)
+# 7. column_count_distribution() behaviour (OUT-5)
+# ---------------------------------------------------------------------------
+
+
+def test_column_count_distribution_reflects_unique_modal_count() -> None:
+    rows = tuple(DataRow(i, ("a", "b", "c")) for i in range(5))
+    distribution = MalformedRowCheck().column_count_distribution(rows)
+    assert distribution.modal_count == 3
+    assert distribution.counts_by_column_count == ((3, 5),)
+
+
+def test_column_count_distribution_reflects_multiple_distinct_counts_in_ascending_order() -> None:
+    rows = (
+        DataRow(0, ("a", "b", "c")),
+        DataRow(1, ("a", "b", "c")),
+        DataRow(2, ("a", "b")),
+    )
+    distribution = MalformedRowCheck().column_count_distribution(rows)
+    assert distribution.modal_count == 3
+    assert distribution.counts_by_column_count == ((2, 1), (3, 2))
+
+
+def test_column_count_distribution_modal_count_agrees_with_check_tie_resolution() -> None:
+    # Same tied fixture as test_two_way_modal_tie_resolved_by_smallest_line_index:
+    # tied candidates {5, 7}; smallest line_index (0) has 5 fields.
+    rows = (
+        DataRow(0, tuple("12345")),
+        DataRow(1, tuple("1234567")),
+        DataRow(2, tuple("12345")),
+        DataRow(3, tuple("1234567")),
+    )
+    check = MalformedRowCheck()
+    finding = check.check(rows)
+    distribution = check.column_count_distribution(rows)
+    # The modal count column_count_distribution() reports must be the
+    # same value check() itself compared every row's field count
+    # against -- never an independently (and potentially inconsistently)
+    # resolved tie.
+    assert distribution.modal_count == 5
+    assert f"({distribution.modal_count})" in finding.description
+    assert distribution.counts_by_column_count == ((5, 2), (7, 2))
+
+
+def test_column_count_distribution_repeated_execution_produces_identical_result() -> None:
+    rows = (
+        DataRow(0, ("a", "b", "c")),
+        DataRow(1, ("a", "b")),
+        DataRow(2, ("a", "b", "c")),
+    )
+    check = MalformedRowCheck()
+    first = check.column_count_distribution(rows)
+    second = check.column_count_distribution(rows)
+    assert first == second
+
+
+def test_column_count_distribution_independent_of_input_traversal_order() -> None:
+    rows = (
+        DataRow(5, ("a", "b", "c")),
+        DataRow(6, ("a", "b", "c", "d")),
+        DataRow(7, ("a", "b", "c", "d", "e")),
+        DataRow(8, ("a", "b", "c")),
+        DataRow(9, ("a", "b", "c", "d")),
+        DataRow(10, ("a", "b", "c", "d", "e")),
+    )
+    shuffled = list(rows)
+    random.Random(42).shuffle(shuffled)
+    check = MalformedRowCheck()
+    ordered_result = check.column_count_distribution(rows)
+    shuffled_result = check.column_count_distribution(shuffled)
+    assert ordered_result == shuffled_result
+
+
+def test_column_count_distribution_empty_data_rows_returns_zero_state() -> None:
+    distribution = MalformedRowCheck().column_count_distribution(())
+    assert distribution.counts_by_column_count == ()
+    assert distribution.modal_count == 0
+
+
+def test_column_count_distribution_return_type_is_column_count_distribution() -> None:
+    distribution = MalformedRowCheck().column_count_distribution(
+        (DataRow(0, ("a",)),)
+    )
+    assert isinstance(distribution, ColumnCountDistribution)
+
+
+def test_column_count_distribution_check_name_is_stable_label() -> None:
+    distribution = MalformedRowCheck().column_count_distribution(
+        (DataRow(0, ("a",)),)
+    )
+    assert distribution.check_name == "malformed_row_check"
+
+
+def test_column_count_distribution_does_not_mutate_input_collection() -> None:
+    rows = [DataRow(0, ("a", "b")), DataRow(1, ("a", "b", "c"))]
+    original_copy = list(rows)
+    MalformedRowCheck().column_count_distribution(rows)
+    assert rows == original_copy
+
+
+# ---------------------------------------------------------------------------
+# 8. Dependency boundaries (structural, AST-based)
 # ---------------------------------------------------------------------------
 
 

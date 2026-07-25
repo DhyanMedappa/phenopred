@@ -26,6 +26,19 @@ class ProfileFileUseCase:
     does not construct, name, or validate that mapping's contents beyond
     looking a given name up in it; the mapping itself is supplied by the
     composition root, per Architecture v1 Section 5.
+
+    `report_serializer` is an optional, additive collaborator supporting
+    the Report Persistence design step (Architecture v1 Section 9/10,
+    AD-3): Table 2's own text already names "... build report ->
+    serialize" as this orchestrator's final pipeline step, and Table 4
+    already documents ReportSerializer as "invoked by ProfileFileUseCase
+    via the composition root". It defaults to None so that every
+    already-approved caller of this constructor -- including every
+    existing unit test's hand-written fakes, none of which supply a
+    ReportSerializer -- continues to construct and execute exactly as
+    before; persistence is only attempted when both a `report_serializer`
+    was injected at construction time and an `output_path` is supplied
+    to a given `execute()` call (see `execute()`'s own docstring).
     """
 
     def __init__(
@@ -40,6 +53,7 @@ class ProfileFileUseCase:
         quality_checks,
         genomic_profilers,
         report_builder,
+        report_serializer=None,
     ):
         self._file_loader = file_loader
         self._line_splitter = line_splitter
@@ -51,13 +65,16 @@ class ProfileFileUseCase:
         self._quality_checks = quality_checks
         self._genomic_profilers = genomic_profilers
         self._report_builder = report_builder
+        self._report_serializer = report_serializer
 
-    def execute(self, file_path):
+    def execute(self, file_path, output_path=None):
         """
         Execute the profiling workflow for one input file, through the
-        currently available pipeline stages (load, structural detection,
-        column identity resolution, row parsing, and quality checks
-        FR-5 through FR-9).
+        full pipeline (load, structural detection, column identity
+        resolution, row parsing, quality checks FR-5 through FR-9,
+        genomic profiling FR-10 through FR-12, reporting, and -- only
+        when both a `report_serializer` was injected at construction
+        time and `output_path` is supplied here -- persistence).
 
         Pipeline order:
 
@@ -79,11 +96,25 @@ class ProfileFileUseCase:
         ↓
         Run genomic profilers
         ↓
-        [report building: not yet wired -- no report builder
-         implementation exists in the current pipeline configuration]
+        Build report (ReportBuilder)
 
         Args:
             file_path: Path to the single source file to profile.
+            output_path: Optional destination for the serialized report
+                artifact, forwarded unaltered to the injected
+                `report_serializer.serialize(report, output_path)` (per
+                Architecture v1 Section 11, output_location is a
+                per-run configuration concern resolved by the caller --
+                this orchestrator never computes or defaults a
+                destination itself). Has no effect when
+                `report_serializer` was not supplied at construction
+                time. When `report_serializer` was supplied but
+                `output_path` is None, persistence is simply not
+                attempted for this call (no error) and
+                `report_artifact_path` is not added to the returned
+                dict, preserving this orchestrator's existing dict
+                shape for every caller that does not opt into
+                persistence.
 
         Returns:
             A plain dict of intermediate pipeline results for this file,
@@ -110,6 +141,35 @@ class ProfileFileUseCase:
                   GenotypeLayoutProfile, or IndelHaploidProfile), for
                   every genomic profiler present in the injected
                   `genomic_profilers` mapping.
+                - column_count_distribution: the ColumnCountDistribution
+                  (OUT-5) produced by malformed_row_check's
+                  `column_count_distribution(data_rows)` method, or None
+                  when malformed_row_check is not present in the
+                  injected `quality_checks` mapping. Never recomputed
+                  here -- this orchestrator retrieves the same
+                  malformed_row_check collaborator used during quality-check 
+                  execution and calls its approved column_count_distribution 
+                  method.
+                  
+                - report: the ProfilingReport assembled by the injected
+                  `report_builder` from this file's `findings`,
+                  `profiles`, `column_count_distribution`, and other
+                  already-computed metadata above. Assembly (ordering,
+                  open-question selection) is entirely `report_builder`'s
+                  own responsibility; this orchestrator only supplies
+                  already-computed inputs to it.
+                - report_artifact_path: the reference returned by the
+                  injected `report_serializer.serialize(report,
+                  output_path)`, present in this dict only when a
+                  `report_serializer` was supplied at construction time
+                  (absent otherwise, so this key never appears for any
+                  caller that did not opt into persistence). When a
+                  `report_serializer` is present but this call's
+                  `output_path` argument is None, this key is still
+                  present but its value is None, since persistence was
+                  not attempted for this call. This orchestrator never
+                  computes, converts, or interprets this value itself
+                  -- it is exactly what `report_serializer` returned.
 
         Raises:
             PhenoPredIngestionError (or one of its subclasses): if the
@@ -165,7 +225,28 @@ class ProfileFileUseCase:
 
         profiles = self._run_genomic_profilers(data_rows, column_layout)
 
-        return {
+        row_count = len(data_rows)
+
+        malformed_row_check = self._quality_checks.get("malformed_row_check")
+        column_count_distribution = None
+        if malformed_row_check is not None:
+            column_count_distribution = (
+                malformed_row_check.column_count_distribution(data_rows)
+            )
+
+        report = self._report_builder.build(
+            source_path=raw_content.source_path,
+            comment_block=comment_block,
+            encoding_profile=encoding_profile,
+            delimiter=delimiter,
+            header_info=header_info,
+            row_count=row_count,
+            column_count_distribution=column_count_distribution,
+            findings=findings,
+            profiles=profiles,
+        )
+
+        result = {
             "source_path": raw_content.source_path,
             "encoding_profile": encoding_profile,
             "comment_block": comment_block,
@@ -176,7 +257,26 @@ class ProfileFileUseCase:
             "findings": findings,
             "skipped_quality_checks": skipped_quality_checks,
             "profiles": profiles,
+            "column_count_distribution": column_count_distribution,
+            "report": report,
         }
+
+        # Persistence (Architecture v1 Section 9/10, AD-3) is entirely
+        # optional and additive: only attempted when this instance was
+        # constructed with a `report_serializer`, and only when this
+        # call was given an `output_path`. `report_artifact_path` is
+        # therefore only ever added to `result` when a serializer was
+        # injected, preserving this method's exact prior return-dict
+        # shape for every caller that does not opt in.
+        if self._report_serializer is not None:
+            report_artifact_path = None
+            if output_path is not None:
+                report_artifact_path = self._report_serializer.serialize(
+                    report, output_path
+                )
+            result["report_artifact_path"] = report_artifact_path
+
+        return result
 
     def _run_quality_checks(self, data_rows, header_info, column_layout):
         """Run every quality check present in `self._quality_checks`,

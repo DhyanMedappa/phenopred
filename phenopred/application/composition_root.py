@@ -80,7 +80,12 @@ from phenopred.domain.quality_checks.malformed_row_check import MalformedRowChec
 from phenopred.domain.quality_checks.missing_value_scanner import (
     MissingValueScanner,
 )
+from phenopred.domain.reporting.open_question_registry import (
+    OpenQuestionRegistry,
+)
+from phenopred.domain.reporting.report_builder import ReportBuilder
 from phenopred.infrastructure.io.raw_file_loader import RawFileLoader
+from phenopred.infrastructure.io.report_writer import JsonReportSerializer
 
 # ---------------------------------------------------------------------------
 # Temporary Stage 1 configuration defaults.
@@ -166,13 +171,28 @@ def build_profile_file_use_case(
               indel_haploid_classifier), matching the profiler names
               ProfileFileUseCase's `_run_genomic_profilers` method
               already looks up.
-            - report_builder: None. Reporting is out of Stage 1 scope;
-              no ReportBuilder implementation exists in this
-              repository to construct. None is the smallest value
-              compatible with ProfileFileUseCase's existing,
-              unmodified constructor -- it is never called by the
-              current, frozen ProfileFileUseCase.execute()
-              implementation.
+            - report_builder: a ReportBuilder instance, constructed with
+              an OpenQuestionRegistry instance injected, per the frozen
+              Reporting Architecture. ReportBuilder assembles the
+              ProfilingReport for each file from that file's already-
+              computed Findings, Profiles, ColumnCountDistribution, and
+              other metadata; OpenQuestionRegistry selects the subset of
+              the SRS's fixed, registered open questions (SRS Section
+              8.2, RISK-1 through RISK-9) applicable to that same
+              Finding/Profile data. Neither collaborator takes any
+              per-run configuration value, so neither is exposed as a
+              parameter of this function.
+            - report_serializer: a JsonReportSerializer instance (Version
+              1's sole ReportSerializer implementation, per AD-3 /
+              Section 9/10), constructor-injected into
+              ProfileFileUseCase per the frozen Report Persistence
+              design step. Stateless -- it takes no per-run
+              configuration value of its own, since `output_path` is
+              supplied per `ProfileFileUseCase.execute()` call by that
+              call's own caller (e.g. cli/main.py), not by this
+              function -- so it is likewise not exposed as a parameter
+              here, mirroring `open_question_registry`/`report_builder`
+              immediately above.
     """
     file_loader = RawFileLoader(sample_size=raw_loader_sample_size)
     line_splitter = RawLineSplitter(comment_prefix=comment_prefix)
@@ -208,6 +228,11 @@ def build_profile_file_use_case(
         "indel_haploid_classifier": indel_haploid_classifier,
     }
 
+    open_question_registry = OpenQuestionRegistry()
+    report_builder = ReportBuilder(open_question_registry=open_question_registry)
+
+    report_serializer = JsonReportSerializer()
+
     return ProfileFileUseCase(
         file_loader=file_loader,
         line_splitter=line_splitter,
@@ -218,5 +243,6 @@ def build_profile_file_use_case(
         row_parser=row_parser,
         quality_checks=quality_checks,
         genomic_profilers=genomic_profilers,
-        report_builder=None,
+        report_builder=report_builder,
+        report_serializer=report_serializer,
     )

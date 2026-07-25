@@ -1,0 +1,323 @@
+{
+  "source_path": "phenopred/tests/unit/integration/data/raw/anonymous_genome_v5_build37.txt",
+  "comment_block": {
+    "lines": [
+      "# ANONYMIZED RAW GENOTYPE DATA \u00e2\u0080\u0094 FOR EDUCATIONAL USE ONLY",
+      "#",
+      "# Source platform : 23andMe v5 chip (direct-to-consumer SNP array)",
+      "# Reference build : GRCh37 / hg19 (NCBI Annotation Release 104)",
+      "# Orientation     : genotypes reported on the plus (+) strand of the reference",
+      "# Identifiers     : donor name, file_id, signature, timestamp and personalized",
+      "#                   account URL have been REMOVED for this teaching dataset.",
+      "#",
+      "# Format: tab-separated. One line per SNP.",
+      "#   column 1 = rsid        (dbSNP reference SNP id, or platform-internal 'i' id)",
+      "#   column 2 = chromosome  (1-22, X, Y, MT)",
+      "#   column 3 = position    (base-pair coordinate on GRCh37)",
+      "#   column 4 = genotype    (alleles on + strand; single allele for haploid",
+      "#                           male X/Y and mitochondrial calls; 'II'/'DD'/'DI'",
+      "#                           denote insertion/deletion calls; '--' = no-call)",
+      "#",
+      "# NOTE ON PRIVACY: a genotype profile is intrinsically personal and can in",
+      "# principle be re-identified. Removing the header identifiers makes the file",
+      "# non-trivially labelled, but it should still be treated as sensitive data and",
+      "# handled under your course's data-use agreement.",
+      "#",
+      "# rsid\tchromosome\tposition\tgenotype"
+    ],
+    "count": 22
+  },
+  "encoding_profile": {
+    "bom_present": false,
+    "ascii_decodable": false,
+    "utf8_decodable": true,
+    "utf8_sig_decodable": true,
+    "latin1_decodable": true
+  },
+  "delimiter": {
+    "character": "\t",
+    "detection_method": "character_frequency_analysis"
+  },
+  "header_info": {
+    "form": "commented_only",
+    "resolved_columns": [
+      "rsid",
+      "chromosome",
+      "position",
+      "genotype"
+    ],
+    "source_line": "# rsid\tchromosome\tposition\tgenotype"
+  },
+  "row_count": 631455,
+  "column_count_distribution": {
+    "check_name": "malformed_row_check",
+    "counts_by_column_count": [
+      [
+        4,
+        631455
+      ]
+    ],
+    "modal_count": 4
+  },
+  "findings": [
+    {
+      "check_name": "duplicate_chr_pos_check",
+      "description": "Rows whose (chromosome, position) pair (at field positions 1, 2) occurs in two or more rows: 2401 duplicated pair(s) found.",
+      "count": 4874,
+      "examples": [
+        "line_index=439 chromosome=1 position=2526746",
+        "line_index=440 chromosome=1 position=2526746",
+        "line_index=2784 chromosome=1 position=11009679",
+        "line_index=2785 chromosome=1 position=11009679",
+        "line_index=5262 chromosome=1 position=19992513",
+        "line_index=5263 chromosome=1 position=19992513",
+        "line_index=5276 chromosome=1 position=20020994",
+        "line_index=5277 chromosome=1 position=20020994",
+        "line_index=5725 chromosome=1 position=21795388",
+        "line_index=5726 chromosome=1 position=21795388"
+      ],
+      "affected_row_refs": [
+        439,
+        440,
+        2784,
+        2785,
+        5262,
+        5263,
+        5276,
+        5277,
+        5725,
+        5726
+      ]
+    },
+    {
+      "check_name": "duplicate_header_check",
+      "description": "Data rows that verbatim-duplicate the resolved column header row.",
+      "count": 0,
+      "examples": [],
+      "affected_row_refs": []
+    },
+    {
+      "check_name": "duplicate_rsid_check",
+      "description": "No duplicated RSID values were observed.",
+      "count": 0,
+      "examples": [],
+      "affected_row_refs": []
+    },
+    {
+      "check_name": "malformed_row_check",
+      "description": "Rows whose field count differs from the file's modal column count (4).",
+      "count": 0,
+      "examples": [],
+      "affected_row_refs": []
+    },
+    {
+      "check_name": "missing_value_scanner",
+      "description": "Literal value frequencies observed across 1 designated column(s): 20 distinct value(s) found.",
+      "count": 631455,
+      "examples": [
+        "CC (142558)",
+        "GG (142163)",
+        "AA (104577)",
+        "TT (104349)",
+        "CT (40673)",
+        "AG (40209)",
+        "-- (10093)",
+        "AC (9849)",
+        "GT (9760)",
+        "C (5651)"
+      ],
+      "affected_row_refs": [
+        4,
+        6,
+        1,
+        0,
+        86,
+        2,
+        106,
+        10,
+        95,
+        608295
+      ]
+    }
+  ],
+  "profiles": [
+    {
+      "profiler_name": "chromosome_label_profiler",
+      "label_counts": [
+        [
+          "1",
+          48902
+        ],
+        [
+          "2",
+          51309
+        ],
+        [
+          "3",
+          42578
+        ],
+        [
+          "4",
+          39055
+        ],
+        [
+          "5",
+          36707
+        ],
+        [
+          "6",
+          43660
+        ],
+        [
+          "7",
+          34005
+        ],
+        [
+          "8",
+          31409
+        ],
+        [
+          "9",
+          26135
+        ],
+        [
+          "10",
+          30237
+        ],
+        [
+          "11",
+          30668
+        ],
+        [
+          "12",
+          29128
+        ],
+        [
+          "13",
+          21936
+        ],
+        [
+          "14",
+          19766
+        ],
+        [
+          "15",
+          18799
+        ],
+        [
+          "16",
+          20194
+        ],
+        [
+          "17",
+          19199
+        ],
+        [
+          "18",
+          17541
+        ],
+        [
+          "19",
+          14677
+        ],
+        [
+          "20",
+          14645
+        ],
+        [
+          "21",
+          8490
+        ],
+        [
+          "22",
+          8805
+        ],
+        [
+          "X",
+          16119
+        ],
+        [
+          "Y",
+          3337
+        ],
+        [
+          "MT",
+          4154
+        ]
+      ]
+    },
+    {
+      "profiler_name": "genotype_layout_classifier",
+      "layout_kind": "single_column_genotype",
+      "column_length_distributions": [
+        [
+          3,
+          [
+            [
+              1,
+              22124
+            ],
+            [
+              2,
+              609331
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "profiler_name": "indel_haploid_classifier",
+      "applicable": true,
+      "indel_token_counts": [
+        [
+          "II",
+          3242
+        ],
+        [
+          "DD",
+          1244
+        ],
+        [
+          "DI",
+          43
+        ]
+      ],
+      "haploid_count": 22124,
+      "diploid_count": 1486
+    }
+  ],
+  "open_questions": [
+    {
+      "statement": "Whether purely numeric chromosome labels (as observed in Dataset A) and numeric-plus-alphabetic chromosome labels (as observed in Dataset B) are equivalent or directly comparable across files has not been established. Any future process that joins, merges, or compares records by chromosome across files of these differing kinds risks misalignment if this is not explicitly reconciled against an authoritative reference.",
+      "related_finding_or_profile": "chromosome_label_profiler"
+    },
+    {
+      "statement": "Whether missing/no-call tokens are handled equivalently across files with differing column layouts and literal token conventions has not been established. A future process that hard-codes one file's missing-value convention risks silently failing to recognize missing data expressed under a different convention.",
+      "related_finding_or_profile": "missing_value_scanner"
+    },
+    {
+      "statement": "Whether duplicate (chromosome, position) pairs observed within a file reflect probe redesigns, multi-allelic sites, re-genotyping, or data artefacts has not been determined. Treating them as errors, or as valid multi-allelic entries, without further investigation risks either discarding valid data or retaining erroneous data.",
+      "related_finding_or_profile": "duplicate_chr_pos_check"
+    },
+    {
+      "statement": "Whether a two-column allele-pair genotype layout and a single-column genotype-string layout (including haploid/indel variants) can be unified into a common representation without loss or misrepresentation has not been established. Any future unification of these encodings carries a risk of information loss if the haploid/diploid/indel distinctions are not preserved.",
+      "related_finding_or_profile": "genotype_layout_classifier"
+    },
+    {
+      "statement": "Each file's header claims a forward/plus-strand orientation, but no independent verification of strand consistency has been performed. Any future position-based operation relying on strand consistency carries a risk of silent error if this claim does not hold in practice.",
+      "related_finding_or_profile": null
+    },
+    {
+      "statement": "Whether a file's content is decodable only under certain text encodings (e.g. not as pure ASCII) has an identified source and location has not been established. This warrants further investigation before any text-processing logic assumes uniform character encoding across files.",
+      "related_finding_or_profile": null
+    },
+    {
+      "statement": "Genotype data is intrinsically personal and can in principle be re-identified even with direct identifiers removed. Any handling of files of this kind inherits a data-protection risk that must be addressed by a dedicated, future security/privacy design, not assumed away here.",
+      "related_finding_or_profile": null
+    },
+    {
+      "statement": "Whether every value in a file's RSID column is a standard dbSNP identifier, as opposed to a platform-internal identifier, has not been established. A future process that assumes all RSID-column values are standard dbSNP identifiers risks mishandling or misinterpreting the platform-internal subset.",
+      "related_finding_or_profile": "duplicate_rsid_check"
+    }
+  ]
+}

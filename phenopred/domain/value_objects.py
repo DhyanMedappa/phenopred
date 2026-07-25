@@ -10,12 +10,17 @@ approved by their respective architecture decisions. ChromosomeLabelInventory,
 GenotypeLayoutProfile, IndelHaploidProfile, and
 GenotypeChromosomeColumnIndices are defined here because they have been
 approved by the Genomic Profiling (FR-10-FR-12) Final Architecture Freeze
-(ADR-1 through ADR-7). Any further value object -- including any
-additional genomic-profiling value object not named above -- still
-requires its own recorded architecture decision before being added to
-this module; adding one ahead of that approval would exceed the scope
-explicitly defined for the current module (Stage 1 Engineering Review,
-Section 7 / Section 16).
+(ADR-1 through ADR-7). ColumnCountDistribution and OpenQuestion are defined
+here because they have been approved by the Reporting Architecture Freeze
+(OUT-5 and OUT-9/OBJ-5/AD-7 respectively): both are small, invariant-free,
+purely descriptive records with no identity or lifecycle of their own,
+matching every other value object in this module -- as opposed to
+ProfilingReport, which the Reporting Architecture Freeze places in
+entities.py because it is this system's per-file output aggregate. Any
+further value object still requires its own recorded architecture
+decision before being added to this module; adding one ahead of that
+approval would exceed the scope explicitly defined for the current
+module (Stage 1 Engineering Review, Section 7 / Section 16).
 """
 
 from __future__ import annotations
@@ -455,3 +460,98 @@ class GenotypeChromosomeColumnIndices:
 
     designated_column_indices: tuple[int, ...]
     chromosome_column_index: int
+
+
+@dataclass(frozen=True, slots=True)
+class ColumnCountDistribution:
+    """Reported observed column-count distribution across a single file's
+    parsed data rows, alongside the modal (dominant) column count (FR-5,
+    OUT-5).
+
+    This is a purely descriptive report of what MalformedRowCheck
+    already computes internally while resolving its modal column count,
+    mirroring EncodingProfile/Delimiter/CommentBlock/HeaderInfo/Finding/
+    ColumnLayout/ChrPosColumnIndices/ChromosomeLabelInventory/
+    GenotypeLayoutProfile/IndelHaploidProfile/
+    GenotypeChromosomeColumnIndices's identical invariant-free, purely
+    descriptive, behavior-free design. It carries no judgment about
+    which rows are malformed -- that remains MalformedRowCheck.check()'s
+    own, separate Finding -- and no corrective action or resolution of
+    its own.
+
+    Per the frozen Reporting Architecture decision resolving OUT-5's
+    representation gap: this value object exists so that the full
+    column-count frequency distribution, already computed (and
+    previously discarded) inside MalformedRowCheck's own modal-count
+    resolution, can be exposed as structured data without altering
+    MalformedRowCheck.check()'s existing signature or behavior, and
+    without duplicating that tallying logic in a second component.
+
+    Ordering contract, mirroring ChromosomeLabelInventory/
+    GenotypeLayoutProfile's identical determinism discipline (NFR-3):
+    `counts_by_column_count` is ordered by ascending column-count value
+    -- never by descending frequency, dictionary/set insertion
+    behavior, or any other non-deterministic basis.
+
+    Attributes:
+        check_name: A short, stable label identifying which check
+            produced this distribution (e.g. "malformed_row_check"),
+            supporting per-finding traceability (NFR-6), mirroring
+            Finding.check_name's identical purpose.
+        counts_by_column_count: Every distinct observed field-count
+            value across the file's parsed data rows, together with its
+            row count, as an ordered tuple of (column_count, row_count)
+            pairs, in ascending column_count order. Not bounded or
+            sampled -- OUT-5 requires the full observed distribution,
+            so this holds the complete, unsampled tally, unlike
+            Finding.examples/affected_row_refs.
+        modal_count: The single field-count value occurring with the
+            highest frequency across the file's parsed data rows, tie-
+            resolved identically to MalformedRowCheck's own frozen
+            "first observed column count wins" convention (the same
+            value MalformedRowCheck.check() itself compares every row's
+            field count against).
+    """
+
+    check_name: str
+    counts_by_column_count: tuple[tuple[int, int], ...]
+    modal_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class OpenQuestion:
+    """A single unresolved question the SRS identifies as requiring
+    future validation, attached to a report without being resolved by
+    any component in this system (OUT-9, OBJ-5, SRS Section 8.2).
+
+    This is a purely descriptive record of one open question's
+    statement and, optionally, which Finding or Profile it relates to,
+    mirroring EncodingProfile/Delimiter/CommentBlock/HeaderInfo/Finding/
+    ColumnLayout/ChrPosColumnIndices/ChromosomeLabelInventory/
+    GenotypeLayoutProfile/IndelHaploidProfile/
+    GenotypeChromosomeColumnIndices/ColumnCountDistribution's identical
+    invariant-free, purely descriptive, behavior-free design. Per the
+    frozen Architecture Decision Record AD-7, an OpenQuestion is
+    attached to a report, never resolved by any component in this
+    system -- resolving it is explicitly future, separate work (SRS
+    Section 8.2, Section 11). This value object performs no selection
+    of which questions are applicable to a given file; that is
+    OpenQuestionRegistry's own, separate responsibility.
+
+    Attributes:
+        statement: The open question's statement, as preserved from SRS
+            Section 8.2 / RISK-1 through RISK-9, without alteration,
+            resolution, or interpretation.
+        related_finding_or_profile: An optional short, stable label
+            (a check_name or profiler_name, mirroring Finding.check_name
+            / the profile value objects' identical profiler_name
+            fields) identifying the Finding or Profile this question is
+            most closely related to, for lightweight traceability
+            (NFR-6). None when the question is not tied to any specific
+            Finding or Profile produced by this system (e.g. an
+            unverified strand-orientation claim, which no component
+            here checks).
+    """
+
+    statement: str
+    related_finding_or_profile: str | None

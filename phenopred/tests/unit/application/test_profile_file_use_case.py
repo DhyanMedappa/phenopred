@@ -5,17 +5,21 @@ ProfileFileUseCase is an application-layer orchestrator: it coordinates
 ten constructor-injected collaborators, owns exactly one branching
 decision (header-line exclusion based on HeaderInfo.form), translates
 two collaborator-local exceptions into PhenoPredIngestionError, and
-assembles a plain result dict. It contains no domain logic of its own.
+assembles a plain result dict -- including, per the frozen Reporting
+Architecture, retrieving column_count_distribution from an injected
+malformed_row_check collaborator (when present) and delegating final
+report assembly to an injected report_builder collaborator. It contains
+no domain logic of its own.
 
 This suite verifies orchestration behavior only -- dependency wiring,
 object propagation, the one application-owned branch, exception
 translation, context construction, and result assembly. It uses
 lightweight, hand-written fakes for every collaborator, each exposing
-only the single method ProfileFileUseCase actually calls. It does not
+only the method(s) ProfileFileUseCase actually calls. It does not
 duplicate the already-approved regression suites for HeaderResolver,
-ColumnIdentityResolver, RowParser, any QualityCheck, or any
-GenomicProfiler -- none of those collaborators' own algorithms are
-exercised here.
+ColumnIdentityResolver, RowParser, any QualityCheck, any
+GenomicProfiler, ReportBuilder, or OpenQuestionRegistry -- none of
+those collaborators' own algorithms are exercised here.
 """
 
 from __future__ import annotations
@@ -37,7 +41,7 @@ from phenopred.domain.value_objects import (
 )
 
 # ---------------------------------------------------------------------------
-# Lightweight fake collaborators -- each exposes only the one method
+# Lightweight fake collaborators -- each exposes only the method(s)
 # ProfileFileUseCase actually calls on it.
 # ---------------------------------------------------------------------------
 
@@ -110,13 +114,19 @@ class _FakeRowParser:
         return self._data_rows
 
 class _FakeQualityCheck:
-    def __init__(self, finding):
+    def __init__(self, finding, column_count_distribution_result=None):
         self._finding = finding
+        self._column_count_distribution_result = column_count_distribution_result
         self.received_args = None
+        self.received_column_count_distribution_args = None
 
     def check(self, *args):
         self.received_args = args
         return self._finding
+
+    def column_count_distribution(self, *args):
+        self.received_column_count_distribution_args = args
+        return self._column_count_distribution_result
 
 class _FakeGenomicProfiler:
     def __init__(self, profile_result):
@@ -126,6 +136,15 @@ class _FakeGenomicProfiler:
     def profile(self, *args):
         self.received_args = args
         return self._profile_result
+
+class _FakeReportBuilder:
+    def __init__(self, report_result="fake_report"):
+        self._report_result = report_result
+        self.received_kwargs = None
+
+    def build(self, **kwargs):
+        self.received_kwargs = kwargs
+        return self._report_result
 
 # ---------------------------------------------------------------------------
 # Shared construction helper (plain function, not a pytest fixture)
@@ -141,6 +160,7 @@ def _make_use_case(
     row_parser=None,
     quality_checks=None,
     genomic_profilers=None,
+    report_builder=None,
 ):
     raw_content = _FakeRawContent(
         source_path="/fake/path.txt",
@@ -174,7 +194,7 @@ def _make_use_case(
         row_parser=row_parser or _FakeRowParser("fake_data_rows"),
         quality_checks=quality_checks if quality_checks is not None else {},
         genomic_profilers=genomic_profilers if genomic_profilers is not None else {},
-        report_builder=None,
+        report_builder=report_builder or _FakeReportBuilder(),
     )
 
 # ---------------------------------------------------------------------------
@@ -195,6 +215,8 @@ def test_result_dict_contains_all_expected_keys() -> None:
         "findings",
         "skipped_quality_checks",
         "profiles",
+        "column_count_distribution",
+        "report",
     }
 
 # ---------------------------------------------------------------------------
@@ -504,20 +526,124 @@ def test_only_injected_genomic_profilers_produce_profiles() -> None:
     assert set(result["profiles"].keys()) == {"chromosome_label_profiler"}
 
 # ---------------------------------------------------------------------------
-# 8. Dependency injection boundary (structural, AST-based)
+# 8. ReportBuilder orchestration: context construction and wiring
+# ---------------------------------------------------------------------------
+
+def test_report_builder_receives_expected_keyword_arguments() -> None:
+    encoding_profile = "encoding_profile_sentinel"
+    comment_block = "comment_block_sentinel"
+    delimiter = "delimiter_sentinel"
+    header_info = HeaderInfo(
+        form="uncommented_row",
+        resolved_columns=("rsid", "chromosome", "position", "genotype"),
+        source_line="rsid\tchromosome\tposition\tgenotype",
+    )
+    data_rows = ["row1", "row2", "row3"]
+    raw_content = _FakeRawContent(
+        source_path="/fake/path.txt", byte_sample=b"x", lines=("a", "b")
+    )
+    report_builder = _FakeReportBuilder()
+
+    use_case = _make_use_case(
+        file_loader=_FakeFileLoader(raw_content),
+        line_splitter=_FakeLineSplitter(comment_block, ["a", "b"]),
+        encoding_detector=_FakeEncodingDetector(encoding_profile),
+        delimiter_detector=_FakeDelimiterDetector(delimiter),
+        header_resolver=_FakeHeaderResolver(header_info),
+        row_parser=_FakeRowParser(data_rows),
+        report_builder=report_builder,
+    )
+
+    result = use_case.execute("/fake/path.txt")
+
+    received = report_builder.received_kwargs
+    assert received["source_path"] == "/fake/path.txt"
+    assert received["comment_block"] is comment_block
+    assert received["encoding_profile"] is encoding_profile
+    assert received["delimiter"] is delimiter
+    assert received["header_info"] is header_info
+    assert received["row_count"] == len(data_rows)
+    assert received["column_count_distribution"] is None
+    assert received["findings"] == {}
+    assert received["profiles"] == {}
+    # Object propagation: the same findings/profiles dicts must be
+    # handed to ReportBuilder and returned in the result dict, never a
+    # copy or a differently-constructed dict for either destination.
+    assert received["findings"] is result["findings"]
+    assert received["profiles"] is result["profiles"]
+
+def test_result_report_is_the_object_report_builder_returns() -> None:
+    report_result = "report_sentinel"
+    report_builder = _FakeReportBuilder(report_result=report_result)
+
+    use_case = _make_use_case(report_builder=report_builder)
+    result = use_case.execute("/fake/path.txt")
+
+    assert result["report"] is report_result
+
+def test_row_count_passed_to_report_builder_equals_length_of_data_rows() -> None:
+    data_rows = ["row1", "row2", "row3", "row4", "row5"]
+    report_builder = _FakeReportBuilder()
+
+    use_case = _make_use_case(
+        row_parser=_FakeRowParser(data_rows),
+        report_builder=report_builder,
+    )
+    use_case.execute("/fake/path.txt")
+
+    assert report_builder.received_kwargs["row_count"] == len(data_rows)
+
+def test_column_count_distribution_propagated_when_malformed_row_check_present() -> None:
+    data_rows = "fake_data_rows"
+    column_count_distribution_result = "column_count_distribution_sentinel"
+    malformed_row_check = _FakeQualityCheck(
+        "finding1", column_count_distribution_result=column_count_distribution_result
+    )
+    report_builder = _FakeReportBuilder()
+
+    use_case = _make_use_case(
+        row_parser=_FakeRowParser(data_rows),
+        quality_checks={"malformed_row_check": malformed_row_check},
+        report_builder=report_builder,
+    )
+    result = use_case.execute("/fake/path.txt")
+
+    assert malformed_row_check.received_column_count_distribution_args == (data_rows,)
+    assert result["column_count_distribution"] is column_count_distribution_result
+    assert (
+        report_builder.received_kwargs["column_count_distribution"]
+        is column_count_distribution_result
+    )
+
+def test_column_count_distribution_is_none_when_malformed_row_check_absent() -> None:
+    report_builder = _FakeReportBuilder()
+
+    use_case = _make_use_case(report_builder=report_builder)
+    result = use_case.execute("/fake/path.txt")
+
+    assert result["column_count_distribution"] is None
+    assert report_builder.received_kwargs["column_count_distribution"] is None
+
+# ---------------------------------------------------------------------------
+# 9. Dependency injection boundary (structural, AST-based)
 # ---------------------------------------------------------------------------
 
 def _get_forbidden_imported_class_names(module) -> set[str]:
     """Return the set of local names bound by imports whose source
     module path falls under a forbidden concrete-implementation package
-    (domain.quality_checks or domain.genomic_profiling), regardless of
-    which specific class or file is involved. This checks the
-    architectural package boundary itself, not any current filename.
+    (domain.quality_checks, domain.genomic_profiling, or
+    domain.reporting), regardless of which specific class or file is
+    involved. This checks the architectural package boundary itself,
+    not any current filename.
     """
     with open(module.__file__, encoding="utf-8") as f:
         source = f.read()
     tree = ast.parse(source)
-    forbidden_roots = ("domain.quality_checks", "domain.genomic_profiling")
+    forbidden_roots = (
+        "domain.quality_checks",
+        "domain.genomic_profiling",
+        "domain.reporting",
+    )
     forbidden_names: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
@@ -546,7 +672,7 @@ def _get_called_bare_names(module) -> set[str]:
             called_names.add(node.func.id)
     return called_names
 
-def test_profile_file_use_case_never_imports_concrete_quality_check_or_profiler_implementations() -> None:
+def test_profile_file_use_case_never_imports_concrete_quality_check_profiler_or_reporting_implementations() -> None:
     # Rule 1: no import may originate from the architecturally forbidden
     # concrete-implementation package roots -- checked by package path,
     # never by filename substring matching.
@@ -564,10 +690,10 @@ def test_profile_file_use_case_never_imports_concrete_quality_check_or_profiler_
     # intersection remains the correct, general check that would catch
     # a forbidden instantiation even if Rule 1's import guard were ever
     # weakened, without flagging any legitimate method/function call
-    # (load, parse, detect, check, profile, _run_quality_checks,
-    # _run_genomic_profilers, str, dict, list, etc.), since those are
-    # either ast.Attribute callees or bare names never imported from a
-    # forbidden module.
+    # (load, parse, detect, check, profile, build,
+    # _run_quality_checks, _run_genomic_profilers, str, dict, list,
+    # etc.), since those are either ast.Attribute callees or bare names
+    # never imported from a forbidden module.
     called_bare_names = _get_called_bare_names(profile_file_use_case_module)
     disallowed_instantiations = called_bare_names & forbidden_class_names
     assert not disallowed_instantiations, (

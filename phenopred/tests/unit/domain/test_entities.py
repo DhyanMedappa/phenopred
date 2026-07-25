@@ -1,19 +1,24 @@
 # tests/unit/domain/test_entities.py
-"""Unit tests for DataRow (FR-4) and its sole enforced invariant.
+"""Unit tests for DataRow (FR-4) and ProfilingReport, and each entity's
+own enforced (or deliberately absent) invariants.
 
 Mirrors the testing approach established by test_delimiter_detector.py,
 test_raw_line_splitter.py, and test_header_resolver.py: small, synthetic,
 in-memory fixtures only, no file I/O, exercising exactly the structural
-properties named by the frozen RowParser design specification -- and no
-more. This suite verifies DataRow only; it does not test or anticipate
-any future entity (GenotypeFile, ProfilingReport).
+properties named by each entity's own frozen design specification -- and
+no more. This suite verifies DataRow and ProfilingReport only; it does
+not test or anticipate GenotypeFile, which remains intentionally absent
+from entities.py. It does not test ReportBuilder's or
+OpenQuestionRegistry's own assembly/selection logic -- only that
+ProfilingReport itself holds whatever values it is constructed with,
+unaltered.
 """
 
 from __future__ import annotations
 
 import dataclasses
 
-from phenopred.domain.entities import DataRow
+from phenopred.domain.entities import DataRow, ProfilingReport
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +124,125 @@ def test_data_row_accepts_non_alphanumeric_field_content() -> None:
     # DataRow performs no content-shape or missing-value judgment.
     row = DataRow(line_index=0, fields=("--", "0", "!!!", "café"))
     assert row.fields == ("--", "0", "!!!", "café")
+
+
+# ---------------------------------------------------------------------------
+# 5. ProfilingReport contract -- correct fields
+# ---------------------------------------------------------------------------
+
+
+def test_profiling_report_holds_correct_fields() -> None:
+    report = ProfilingReport(
+        source_path="genome.txt",
+        comment_block="comment_block_sentinel",
+        encoding_profile="encoding_profile_sentinel",
+        delimiter="delimiter_sentinel",
+        header_info="header_info_sentinel",
+        row_count=10,
+        column_count_distribution="column_count_distribution_sentinel",
+        findings=("finding_sentinel",),
+        profiles=("profile_sentinel",),
+        open_questions=("open_question_sentinel",),
+    )
+    assert report.source_path == "genome.txt"
+    assert report.comment_block == "comment_block_sentinel"
+    assert report.encoding_profile == "encoding_profile_sentinel"
+    assert report.delimiter == "delimiter_sentinel"
+    assert report.header_info == "header_info_sentinel"
+    assert report.row_count == 10
+    assert report.column_count_distribution == "column_count_distribution_sentinel"
+    assert report.findings == ("finding_sentinel",)
+    assert report.profiles == ("profile_sentinel",)
+    assert report.open_questions == ("open_question_sentinel",)
+
+
+# ---------------------------------------------------------------------------
+# 6. ProfilingReport immutability (frozen=True, slots=True)
+# ---------------------------------------------------------------------------
+
+
+def _make_profiling_report() -> ProfilingReport:
+    return ProfilingReport(
+        source_path="genome.txt",
+        comment_block="comment_block_sentinel",
+        encoding_profile="encoding_profile_sentinel",
+        delimiter="delimiter_sentinel",
+        header_info="header_info_sentinel",
+        row_count=10,
+        column_count_distribution=None,
+        findings=(),
+        profiles=(),
+        open_questions=(),
+    )
+
+
+def test_profiling_report_reassignment_of_source_path_raises() -> None:
+    report = _make_profiling_report()
+    try:
+        report.source_path = "other.txt"  # type: ignore[misc]
+        raise AssertionError("expected FrozenInstanceError")
+    except dataclasses.FrozenInstanceError:
+        pass
+
+
+def test_profiling_report_reassignment_of_findings_raises() -> None:
+    report = _make_profiling_report()
+    try:
+        report.findings = ("new_finding",)  # type: ignore[misc]
+        raise AssertionError("expected FrozenInstanceError")
+    except dataclasses.FrozenInstanceError:
+        pass
+
+
+def test_profiling_report_rejects_new_attribute() -> None:
+    report = _make_profiling_report()
+    try:
+        report.extra = "not allowed"  # type: ignore[attr-defined]
+        raise AssertionError("expected AttributeError or TypeError")
+    except (AttributeError, TypeError):
+        pass
+
+
+# ---------------------------------------------------------------------------
+# 7. ProfilingReport enforces no invariant (unlike DataRow)
+# ---------------------------------------------------------------------------
+
+
+def test_profiling_report_accepts_none_column_count_distribution() -> None:
+    # Unlike DataRow, ProfilingReport names no invariant of its own --
+    # column_count_distribution=None is a legitimate, unrejected value
+    # (the "malformed_row_check not injected" case).
+    report = ProfilingReport(
+        source_path="genome.txt",
+        comment_block="comment_block_sentinel",
+        encoding_profile="encoding_profile_sentinel",
+        delimiter="delimiter_sentinel",
+        header_info="header_info_sentinel",
+        row_count=0,
+        column_count_distribution=None,
+        findings=(),
+        profiles=(),
+        open_questions=(),
+    )
+    assert report.column_count_distribution is None
+
+
+def test_profiling_report_accepts_empty_findings_profiles_and_open_questions() -> None:
+    report = ProfilingReport(
+        source_path="genome.txt",
+        comment_block="comment_block_sentinel",
+        encoding_profile="encoding_profile_sentinel",
+        delimiter="delimiter_sentinel",
+        header_info="header_info_sentinel",
+        row_count=0,
+        column_count_distribution=None,
+        findings=(),
+        profiles=(),
+        open_questions=(),
+    )
+    assert report.findings == ()
+    assert report.profiles == ()
+    assert report.open_questions == ()
 
 
 def _run_all() -> None:
