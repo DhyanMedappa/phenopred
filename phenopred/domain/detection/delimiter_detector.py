@@ -36,13 +36,21 @@ analysis over a sample of already-in-memory lines. Per Architecture v1
 - It never performs comment/data separation, header resolution, or row
   parsing — those are separate FRs implemented by separate modules
   (raw_line_splitter, header_resolver, row_parser).
+- Per Architecture v1 Section 12: `detect()` logs, at INFO, the detected
+  delimiter character and detection method on success; on the
+  DelimiterNotDetectedError condition (Section 13.1's explicitly-named
+  structural error), it logs at ERROR before raising, with no row
+  content in either message (NFR-4).
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
 from phenopred.domain.value_objects import Delimiter
+
+logger = logging.getLogger(__name__)
 
 # Fixed candidate set, in fixed preference order. The order is used solely
 # as a deterministic tie-break when two or more candidates present equally
@@ -130,11 +138,20 @@ class DelimiterDetector:
             # candidate in _CANDIDATE_DELIMITERS wins any tie.
 
         if best_candidate is None:
+            logger.error(
+                "No delimiter could be confidently and consistently "
+                "detected across the sampled data lines."
+            )
             raise DelimiterNotDetectedError(
                 "No delimiter could be confidently and consistently "
                 "detected across the sampled data lines."
             )
 
+        logger.info(
+            "Detected delimiter: character=%r detection_method=%s",
+            best_candidate,
+            _DETECTION_METHOD,
+        )
         return Delimiter(
             character=best_candidate,
             detection_method=_DETECTION_METHOD,

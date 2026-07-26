@@ -50,6 +50,10 @@ the frozen "Finding Output Mapping for DuplicateChrPosCheck (FR-9)" ADR:
 - This component never raises: Architecture v1 Section 13.2 requires
   data-quality conditions to always be represented as Finding data,
   never exceptions.
+- Per Architecture v1 Section 12: `check()` logs, at INFO, this check's
+  own name and a count-only summary (duplicate-row count, distinct
+  duplicated pair count) when it completes -- never the literal
+  chromosome/position values themselves (NFR-4).
 
 Determinism note (NFR-3): a Counter and a frozenset are used internally
 purely as O(1) frequency-tally and membership-test aids. Neither is ever
@@ -65,11 +69,14 @@ including across different Python versions or hash-randomization seeds.
 
 from __future__ import annotations
 
+import logging
 from collections import Counter
 from collections.abc import Sequence
 
 from phenopred.domain.entities import DataRow
 from phenopred.domain.value_objects import ChrPosColumnIndices, Finding
+
+logger = logging.getLogger(__name__)
 
 _CHECK_NAME = "duplicate_chr_pos_check"
 _MAX_SAMPLE_SIZE = 10
@@ -197,6 +204,12 @@ class DuplicateChrPosCheck:
 
         sampled_rows = affected_rows[:_MAX_SAMPLE_SIZE]
 
+        logger.info(
+            "%s: %d duplicated row(s) found (%d distinct duplicated pair(s))",
+            _CHECK_NAME,
+            total_affected_row_count,
+            len(duplicated_pairs),
+        )
         return Finding(
             check_name=_CHECK_NAME,
             description=(
@@ -221,6 +234,10 @@ class DuplicateChrPosCheck:
         `position_column_index`, or no observed (chromosome, position)
         pair occurred in two or more rows.
         """
+        logger.info(
+            "%s: 0 duplicated row(s) found (0 distinct duplicated pair(s))",
+            _CHECK_NAME,
+        )
         return Finding(
             check_name=_CHECK_NAME,
             description=(

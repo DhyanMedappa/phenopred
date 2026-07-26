@@ -40,15 +40,22 @@ for MissingValueScanner (FR-6)" ADR:
 - This component never raises: Architecture v1 Section 13.2 requires
   data-quality conditions to always be represented as Finding data,
   never exceptions.
+- Per Architecture v1 Section 12: `check()` logs, at INFO, this check's
+  own name and a count-only summary (total occurrences, distinct value
+  count) when it completes -- never the literal observed values
+  themselves (NFR-4).
 """
 
 from __future__ import annotations
 
+import logging
 from collections import Counter
 from collections.abc import Sequence
 
 from phenopred.domain.entities import DataRow
 from phenopred.domain.value_objects import Finding
+
+logger = logging.getLogger(__name__)
 
 _CHECK_NAME = "missing_value_scanner"
 _MAX_SAMPLE_SIZE = 10
@@ -142,6 +149,12 @@ class MissingValueScanner:
         )
         sampled_values = ordered_values[:_MAX_SAMPLE_SIZE]
 
+        logger.info(
+            "%s: %d occurrence(s) across %d distinct value(s)",
+            _CHECK_NAME,
+            total_occurrences,
+            distinct_value_count,
+        )
         return Finding(
             check_name=_CHECK_NAME,
             description=(
@@ -165,6 +178,7 @@ class MissingValueScanner:
         `designated_column_indices` is empty, or no designated index was
         within bounds for any row.
         """
+        logger.info("%s: 0 occurrence(s) across 0 distinct value(s)", _CHECK_NAME)
         return Finding(
             check_name=_CHECK_NAME,
             description=(

@@ -159,6 +159,16 @@ def test_cli_processes_ancestrydna_and_persists_valid_report(tmp_path: Path) -> 
     assert output_path.exists()
     assert f"Report written to: {output_path}" in result.stdout
 
+    # Architecture v1 Step 8: cli/main.py now calls
+    # composition_root.configure_logging() once before pipeline
+    # construction, so a real CLI run's own infrastructure-layer log
+    # calls (e.g. RawFileLoader's "Loaded source file" INFO record)
+    # should now genuinely reach stderr -- proving the full
+    # ConfigLoader -> LoggerSetup wiring end to end through the actual
+    # external CLI boundary, not just via composition_root.py's own
+    # direct unit tests (tests/unit/application/test_composition_root.py).
+    assert "Loaded source file" in result.stderr
+
     with output_path.open(encoding="utf-8") as handle:
         payload = json.load(handle)
 
@@ -202,6 +212,155 @@ def test_cli_processes_23andme_and_persists_valid_report(tmp_path: Path) -> None
         "position",
         "genotype",
     ]
+
+
+def _run_cli_raw(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    """Like `_run_cli`, but accepts a raw argv list -- used by the
+    `--config` lifecycle tests below (Architecture v1 Section 5/11),
+    which need to pass `--config` (and sometimes omit `--output`
+    entirely) rather than always the fixed `<input> --output <path>`
+    shape `_run_cli` assumes.
+    """
+    return subprocess.run(
+        [sys.executable, "-m", "phenopred.cli.main", *args],
+        capture_output=True,
+        text=True,
+        cwd=cwd,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 3. --config CLI lifecycle (Architecture v1 Section 5/11)
+# ---------------------------------------------------------------------------
+
+
+def test_cli_config_output_location_is_honored_when_output_flag_omitted(
+    tmp_path: Path,
+) -> None:
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps({"output_location": str(reports_dir)}), encoding="utf-8"
+    )
+
+    result = _run_cli_raw(
+        [str(ANCESTRYDNA), "--config", str(config_path)], cwd=tmp_path
+    )
+
+    assert result.returncode == 0, (
+        f"CLI exited non-zero.\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    expected_path = reports_dir / "AncestryDNA.profilingreport.json"
+    assert expected_path.exists()
+    assert f"Report written to: {expected_path}" in result.stdout
+
+
+def test_cli_explicit_output_flag_overrides_config_output_location(
+    tmp_path: Path,
+) -> None:
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps({"output_location": str(reports_dir)}), encoding="utf-8"
+    )
+    explicit_output = tmp_path / "explicit.profilingreport.json"
+
+    result = _run_cli_raw(
+        [
+            str(ANCESTRYDNA),
+            "--config",
+            str(config_path),
+            "--output",
+            str(explicit_output),
+        ],
+        cwd=tmp_path,
+    )
+
+    assert result.returncode == 0, (
+        f"CLI exited non-zero.\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert explicit_output.exists()
+    assert not (reports_dir / "AncestryDNA.profilingreport.json").exists()
+
+
+def test_cli_config_logging_level_suppresses_default_info_logs(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps({"logging_level": "ERROR"}), encoding="utf-8"
+    )
+    output_path = tmp_path / "report.json"
+
+    result = _run_cli_raw(
+        [
+            str(ANCESTRYDNA),
+            "--config",
+            str(config_path),
+            "--output",
+            str(output_path),
+        ],
+        cwd=tmp_path,
+    )
+
+    assert result.returncode == 0, (
+        f"CLI exited non-zero.\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    # At the default level (INFO), RawFileLoader's own "Loaded source
+    # file" record always appears (see the AncestryDNA test above).
+    # Configuring ERROR here must suppress it, proving logging_level
+    # genuinely reaches LoggerSetup through the full CLI boundary.
+    assert "Loaded source file" not in result.stderr
+
+
+def test_cli_nonexistent_config_path_exits_with_code_three(tmp_path: Path) -> None:
+    missing_config = tmp_path / "does_not_exist.json"
+    output_path = tmp_path / "report.json"
+
+    result = _run_cli_raw(
+        [
+            str(ANCESTRYDNA),
+            "--config",
+            str(missing_config),
+            "--output",
+            str(output_path),
+        ],
+        cwd=tmp_path,
+    )
+
+    assert result.returncode == 3
+    assert not output_path.exists()
+    assert str(missing_config) in result.stderr
+
+
+def test_cli_invalid_config_value_exits_cleanly_with_code_three(tmp_path: Path) -> None:
+    # Regression test: an unrecognized logging_level value used to raise
+    # ValueError from LoggerSetup, uncaught by main.py's own
+    # ConfigLoadError-only handler, crashing with a raw traceback
+    # instead of a clean, translated exit code -- Architecture v1
+    # Section 5 requires cli/main.py to translate every domain/infra
+    # exception into a process exit code and user-facing message.
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps({"logging_level": "TRACE"}), encoding="utf-8")
+    output_path = tmp_path / "report.json"
+
+    result = _run_cli_raw(
+        [
+            str(ANCESTRYDNA),
+            "--config",
+            str(config_path),
+            "--output",
+            str(output_path),
+        ],
+        cwd=tmp_path,
+    )
+
+    assert result.returncode == 3
+    assert not output_path.exists()
+    assert "Traceback" not in result.stderr
+    assert "Invalid configuration" in result.stderr
 
 
 def _run_all() -> None:

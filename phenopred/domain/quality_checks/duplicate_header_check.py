@@ -43,14 +43,20 @@ DuplicateHeaderCheck design/approval decisions:
   a maximum of 10 entries (the one concrete number Architecture v1
   Section 17 itself names, drawn from the EDA notebook's own "first 10
   examples" reporting convention), in original row order.
+- Per Architecture v1 Section 12: `check()` logs, at INFO, this check's
+  own name and a count-only summary (duplicate-row count) when it
+  completes -- never row content or field values (NFR-4).
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
 from phenopred.domain.entities import DataRow
 from phenopred.domain.value_objects import Finding, HeaderInfo
+
+logger = logging.getLogger(__name__)
 
 _CHECK_NAME = "duplicate_header_check"
 _MAX_EXAMPLES = 10
@@ -106,6 +112,7 @@ class DuplicateHeaderCheck:
                     matched_examples.append(str(row.fields))
                     matched_refs.append(row.line_index)
 
+        logger.info("%s: %d duplicate row(s) found", _CHECK_NAME, count)
         return Finding(
             check_name=_CHECK_NAME,
             description=(
@@ -122,6 +129,7 @@ class DuplicateHeaderCheck:
         duplicate is found and when no header content is available to
         duplicate (header_info.resolved_columns is None).
         """
+        logger.info("%s: 0 duplicate row(s) found", _CHECK_NAME)
         return Finding(
             check_name=_CHECK_NAME,
             description=(

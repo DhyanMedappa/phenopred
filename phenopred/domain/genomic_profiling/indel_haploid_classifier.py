@@ -96,6 +96,11 @@ through ADR-7, and the frozen Genomic Profiling Architecture Contract:
   chromosome_column_index itself -- that remains ColumnIdentityResolver's
   and ProfileFileUseCase's responsibility; this classifier only consumes
   an already-resolved GenotypeChromosomeColumnIndices.
+- Per Architecture v1 Section 12: `profile()` logs, at INFO, this
+  profiler's own name and a count-only summary (the `applicable` flag,
+  haploid_count, diploid_count, and total indel-token occurrence count)
+  when it completes -- never any observed genotype string or
+  chromosome label itself (NFR-4).
 
 Determinism note (NFR-3): a single forward pass over data_rows tallies
 indel-token occurrence counts (keyed by the constructor-injected token
@@ -111,6 +116,7 @@ seeds.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
 from phenopred.domain.entities import DataRow
@@ -118,6 +124,8 @@ from phenopred.domain.value_objects import (
     GenotypeChromosomeColumnIndices,
     IndelHaploidProfile,
 )
+
+logger = logging.getLogger(__name__)
 
 _PROFILER_NAME = "indel_haploid_classifier"
 
@@ -218,6 +226,11 @@ class IndelHaploidClassifier:
         designated_column_indices = column_indices.designated_column_indices
 
         if len(designated_column_indices) != 1:
+            logger.info(
+                "%s: applicable=False (designated_column_count=%d)",
+                _PROFILER_NAME,
+                len(designated_column_indices),
+            )
             return IndelHaploidProfile(
                 profiler_name=_PROFILER_NAME,
                 applicable=False,
@@ -278,6 +291,15 @@ class IndelHaploidClassifier:
                     # Any other length is ignored: neither haploid nor
                     # diploid, per the frozen classification contract.
 
+        total_indel_occurrences = sum(indel_token_tally.values())
+        logger.info(
+            "%s: applicable=True indel_occurrences=%d haploid_count=%d "
+            "diploid_count=%d",
+            _PROFILER_NAME,
+            total_indel_occurrences,
+            haploid_count,
+            diploid_count,
+        )
         return IndelHaploidProfile(
             profiler_name=_PROFILER_NAME,
             applicable=True,

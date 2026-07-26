@@ -60,6 +60,10 @@ through ADR-7, and the frozen Genomic Profiling Architecture Contract:
   detection, duplicate detection, missing-value scanning); those remain
   the exclusive responsibility of the separate FR-5..FR-9 QualityCheck
   implementations.
+- Per Architecture v1 Section 12: `profile()` logs, at INFO, this
+  profiler's own name and a count-only summary (distinct chromosome-
+  label count) when it completes -- never the literal label values
+  themselves (NFR-4).
 
 Determinism note (NFR-3): a single forward pass over data_rows tallies
 each distinct label's occurrence count and records the line_index at
@@ -73,10 +77,13 @@ or hash-randomization seeds.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
 from phenopred.domain.entities import DataRow
 from phenopred.domain.value_objects import ChromosomeLabelInventory
+
+logger = logging.getLogger(__name__)
 
 _PROFILER_NAME = "chromosome_label_profiler"
 
@@ -158,6 +165,11 @@ class ChromosomeLabelProfiler:
             key=lambda label: first_observed_line_index[label],
         )
 
+        logger.info(
+            "%s: %d distinct chromosome label(s) found",
+            _PROFILER_NAME,
+            len(ordered_labels),
+        )
         return ChromosomeLabelInventory(
             profiler_name=_PROFILER_NAME,
             label_counts=tuple(

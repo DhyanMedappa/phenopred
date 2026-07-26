@@ -1,4 +1,12 @@
+"""Application layer use case for orchestrating the full PhenoPred file profiling pipeline.
+
+Coordinates ConfigLoader, LoggerSetup, domain services, and ReportWriter per Architecture V1 Section 5.
+Enforces dependency inversion via domain interfaces. Contains no domain logic or infrastructure concerns.
+"""
+
 from __future__ import annotations
+
+import logging
 
 from phenopred.domain.detection.column_identity_resolver import (
     ColumnIdentityNotResolvedError,
@@ -9,6 +17,8 @@ from phenopred.domain.value_objects import (
     ChrPosColumnIndices,
     GenotypeChromosomeColumnIndices,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ProfileFileUseCase:
@@ -39,6 +49,19 @@ class ProfileFileUseCase:
     before; persistence is only attempted when both a `report_serializer`
     was injected at construction time and an `output_path` is supplied
     to a given `execute()` call (see `execute()`'s own docstring).
+
+    Per Architecture v1 Section 12: `execute()` logs, at INFO, the file
+    identifier (path) being profiled, exactly once, at the very start
+    of each call -- this is the "file identifier" Section 12 names for
+    per-file log correlation. Every individual QualityCheck/
+    GenomicProfiler still logs only its own name and a count-only
+    summary (never a file identifier itself, since none of their own,
+    already-approved method signatures accept one); combined with this
+    orchestrator's one file-identifying INFO line at the start, and per
+    Architecture v1's own per-file-independence principle (FR-15/CON-3
+    -- only one file is ever profiled per run), every subsequent log
+    line in the same run is unambiguously attributable to this file
+    without requiring any check/profiler signature change.
     """
 
     def __init__(
@@ -187,6 +210,8 @@ class ProfileFileUseCase:
             identical exception-ownership contract documented in
             column_identity_resolver.py).
         """
+        logger.info("Profiling file: path=%s", file_path)
+
         raw_content = self._file_loader.load(file_path)
 
         encoding_profile = self._encoding_detector.detect(raw_content.byte_sample)

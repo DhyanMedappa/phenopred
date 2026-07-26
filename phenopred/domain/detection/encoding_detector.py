@@ -23,11 +23,18 @@ Engineering Review:
   byte values 0x00-0xFF, decoding under Latin-1 can never fail. As a
   consequence, `detect()` never raises: it always returns a well-formed
   EncodingProfile for any `bytes` input, including an empty sample.
+- Per Architecture v1 Section 12: `detect()` logs, at INFO, the
+  detected encoding characteristics (BOM presence and per-encoding
+  decodability), never the byte sample's actual content (NFR-4).
 """
 
 from __future__ import annotations
 
+import logging
+
 from phenopred.domain.value_objects import EncodingProfile
+
+logger = logging.getLogger(__name__)
 
 _UTF8_BOM = b"\xef\xbb\xbf"
 
@@ -53,13 +60,24 @@ class EncodingDetector:
             under ASCII, UTF-8, UTF-8-sig, and Latin-1. This method never
             raises.
         """
-        return EncodingProfile(
+        profile = EncodingProfile(
             bom_present=self._has_utf8_bom(data),
             ascii_decodable=self._is_decodable(data, "ascii"),
             utf8_decodable=self._is_decodable(data, "utf-8"),
             utf8_sig_decodable=self._is_decodable(data, "utf-8-sig"),
             latin1_decodable=self._is_decodable(data, "latin-1"),
         )
+        logger.info(
+            "Detected encoding characteristics: bom_present=%s "
+            "ascii_decodable=%s utf8_decodable=%s utf8_sig_decodable=%s "
+            "latin1_decodable=%s",
+            profile.bom_present,
+            profile.ascii_decodable,
+            profile.utf8_decodable,
+            profile.utf8_sig_decodable,
+            profile.latin1_decodable,
+        )
+        return profile
 
     def _has_utf8_bom(self, data: bytes) -> bool:
         """Check for a UTF-8 byte-order-mark by direct byte-prefix

@@ -76,13 +76,22 @@ the Stage 1 Engineering Review:
   a structural/infrastructure error. This detector never raises, imports,
   or depends on PhenoPredIngestionError or any of its subclasses
   (phenopred/domain/errors.py).
+- Per Architecture v1 Section 12: `detect()` logs, at INFO, the resolved
+  header form and resolved column names for each of its three possible
+  outcomes (uncommented_row, commented_only, absent). Column *names*
+  are schema labels, not genotype/allele values, so logging them does
+  not conflict with Section 12's NFR-4 assumption against logging raw
+  row content.
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
 from phenopred.domain.value_objects import CommentBlock, Delimiter, HeaderInfo
+
+logger = logging.getLogger(__name__)
 
 
 class HeaderResolver:
@@ -139,6 +148,10 @@ class HeaderResolver:
             first_line = data_lines[0]
             tokens = first_line.split(delimiter.character)
             if self._header_keyword in tokens:
+                logger.info(
+                    "Resolved header: form=uncommented_row resolved_columns=%s",
+                    tokens,
+                )
                 return HeaderInfo(
                     form="uncommented_row",
                     resolved_columns=tuple(tokens),
@@ -166,12 +179,17 @@ class HeaderResolver:
                     if tokens
                     else tuple(tokens)
                 )
+                logger.info(
+                    "Resolved header: form=commented_only resolved_columns=%s",
+                    semantic_columns,
+                )
                 return HeaderInfo(
                     form="commented_only",
                     resolved_columns=tuple(semantic_columns),
                     source_line=comment_line,
                 )
 
+        logger.info("Resolved header: form=absent resolved_columns=None")
         return HeaderInfo(
             form="absent",
             resolved_columns=None,

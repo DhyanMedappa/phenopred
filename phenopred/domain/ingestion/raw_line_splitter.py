@@ -32,13 +32,24 @@ v1 (Section 4/5/6/9) and the Stage 1 Engineering Review:
   infrastructure-error list, unlike DelimiterDetector's "no delimiter
   detected" condition. A prefix check against a string either matches or
   it doesn't; there is no unreachable or error state to guard against.
+- Per Architecture v1 Section 12 ("Ingestion-stage steps... log at INFO
+  level with the detected value"): `split()` logs, at INFO, the
+  resulting comment-line and data-line counts once classification
+  completes. This is a count-only log (no line content, comment or
+  data, is ever logged), consistent with Section 12's own assumption
+  that raw genotype/allele content should not appear in logs by default
+  (NFR-4). This module still performs no I/O of any kind; logging is a
+  cross-cutting facility (Section 2), not domain I/O.
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
 from phenopred.domain.value_objects import CommentBlock
+
+logger = logging.getLogger(__name__)
 
 
 class RawLineSplitter:
@@ -100,5 +111,11 @@ class RawLineSplitter:
         comment_block = CommentBlock(
             lines=tuple(comment_lines),
             count=len(comment_lines),
+        )
+        logger.info(
+            "Split lines into comment/data blocks: comment_count=%d "
+            "data_line_count=%d",
+            len(comment_lines),
+            len(data_lines),
         )
         return comment_block, tuple(data_lines)

@@ -48,15 +48,22 @@ Reporting Architecture (OUT-5 representation decision):
   ColumnCountDistribution via the new `column_count_distribution()`
   method, sharing the identical tallying helper `check()` itself uses --
   the tally is never computed twice by two separate implementations.
+- Per Architecture v1 Section 12: `check()` logs, at INFO, this check's
+  own name and a count-only summary (modal column count and malformed-
+  row count) when it completes -- never row content or field values
+  (NFR-4).
 """
 
 from __future__ import annotations
 
+import logging
 from collections import Counter
 from collections.abc import Sequence
 
 from phenopred.domain.entities import DataRow
 from phenopred.domain.value_objects import ColumnCountDistribution, Finding
+
+logger = logging.getLogger(__name__)
 
 _CHECK_NAME = "malformed_row_check"
 _MAX_SAMPLE_SIZE = 10
@@ -105,6 +112,7 @@ class MalformedRowCheck:
             reported as Finding data, never raised as exceptions.
         """
         if not data_rows:
+            logger.info("%s: 0 malformed row(s) found (no data rows)", _CHECK_NAME)
             return Finding(
                 check_name=_CHECK_NAME,
                 description=(
@@ -131,7 +139,7 @@ class MalformedRowCheck:
         # non-line_index-ordered sequence, without altering, reordering,
         # or mutating the input collection itself (a new list is built).
 
-        return Finding(
+        finding = Finding(
             check_name=_CHECK_NAME,
             description=(
                 f"Rows whose field count differs from the file's modal "
@@ -146,6 +154,13 @@ class MalformedRowCheck:
                 row.line_index for row in malformed_rows[:_MAX_SAMPLE_SIZE]
             ),
         )
+        logger.info(
+            "%s: modal_column_count=%d malformed_row_count=%d",
+            _CHECK_NAME,
+            modal_count,
+            finding.count,
+        )
+        return finding
 
     def column_count_distribution(
         self, data_rows: Sequence[DataRow]

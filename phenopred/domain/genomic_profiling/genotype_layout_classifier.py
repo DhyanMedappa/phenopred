@@ -78,6 +78,11 @@ through ADR-7, and the frozen Genomic Profiling Architecture Contract:
   -- that remains ColumnIdentityResolver's and ProfileFileUseCase's
   responsibility; this profiler only consumes an already-resolved
   sequence.
+- Per Architecture v1 Section 12: `profile()` logs, at INFO, this
+  profiler's own name and a count-only summary (the classified
+  `layout_kind`, plus the designated-column count it was derived from)
+  when it completes -- never any observed genotype/allele string
+  itself (NFR-4).
 
 Determinism note (NFR-3): for each designated column, a single forward
 pass over data_rows tallies each distinct observed string length's
@@ -92,10 +97,13 @@ different Python versions or hash-randomization seeds.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
 from phenopred.domain.entities import DataRow
 from phenopred.domain.value_objects import GenotypeLayoutProfile
+
+logger = logging.getLogger(__name__)
 
 _PROFILER_NAME = "genotype_layout_classifier"
 
@@ -166,6 +174,12 @@ class GenotypeLayoutClassifier:
             data_rows, designated_column_indices
         )
 
+        logger.info(
+            "%s: layout_kind=%s designated_column_count=%d",
+            _PROFILER_NAME,
+            layout_kind,
+            len(designated_column_indices),
+        )
         return GenotypeLayoutProfile(
             profiler_name=_PROFILER_NAME,
             layout_kind=layout_kind,
