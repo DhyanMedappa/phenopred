@@ -17,9 +17,16 @@ separate frozen specifications:
   against; they carry no biological interpretation, no orchestration
   logic, and no reporting/presentation content of their own.
 
-TraitCard is not yet defined here: it is explicitly out of scope for the
-Trait Contract Layer (a later, separate reporting concern owned by
-trait_card_builder.py) and remains a named-but-undesigned placeholder.
+TraitCard is now defined here. It was explicitly out of scope for the
+Trait Contract Layer (a later, separate reporting concern), and remains
+so in spirit: TraitCard is a plain, immutable value object that carries
+already-computed facts (a TraitDefinition's static metadata plus a
+TraitPrediction's already-computed result) through to the reporting
+layer. It performs no prediction logic, no genotype interpretation, and
+introduces no new scientific claim of its own -- assembly is the sole
+responsibility of trait_card_builder.py (traits/reporting/), mirroring
+exactly how Architecture V1's report_builder.py assembles Finding/Profile
+data without computing any of it itself.
 """
 
 from __future__ import annotations
@@ -201,3 +208,116 @@ class TraitPrediction:
     confidence: ConfidenceLevel | None
     observed_genotypes: Mapping[str, GenotypeCall]
     supporting_snps: Mapping[str, SNPRecord]
+
+@dataclass(frozen=True, slots=True)
+class TraitCard:
+    """A single, immutable, reporting-facing record pairing one trait's
+    static identity/evidence with its already-computed TraitPrediction,
+    per the frozen Trait Contract Layer's own deferred scope and the
+    Phase 2 Scientific Validation Strategy (Section 11): "the flow
+    requested (prediction -> scientific reference -> observed genotype
+    -> interpretation -> confidence -> limitations) is fully satisfied
+    by defining TraitCard as a fixed-schema, mandatory-field value
+    object... assembled by the existing trait_card_builder.py."
+
+    TraitCard computes nothing. Every fact it carries was already
+    computed elsewhere:
+
+    - trait_id/trait_name/trait_evidence_refs come unmodified from a
+      TraitDefinition (TRAIT_REGISTRY).
+    - The prediction itself -- status, predicted phenotype ("the
+      interpretation"), confidence, observed genotypes, and supporting
+      SNP evidence ("the scientific reference") -- is the already-
+      computed TraitPrediction, embedded whole and unaltered, mirroring
+      TraitComparison's identical "carry the source TraitPrediction(s)
+      through unaltered" discipline in the Comparison Engine.
+    - limitation_keys are stable reference keys only (never rendered
+      caveat prose), mirroring IdentityLikelihood.methodology_caveat_key
+      exactly: the actual sentence is a later, separate reporting-layer
+      concern, never fabricated here.
+
+    TraitCard introduces no new scientific claim, no new interpretation,
+    and no biological judgment of any kind -- it is a thin, additive
+    pairing of two already-validated value objects, plus a fixed set of
+    caveat-reference keys.
+
+    Attributes:
+        trait_id: This trait's identifier, matching both
+            TraitDefinition.trait_id and prediction.trait_id (enforced
+            in __post_init__ as a consistency check between the two
+            already-independent inputs this card pairs together).
+        trait_name: The human-readable trait name, carried unmodified
+            from TraitDefinition.name.
+        trait_evidence_refs: This trait's own trait-level literature
+            citations, carried unmodified from
+            TraitDefinition.evidence_refs -- distinct from any
+            SNPRecord.citation already embedded inside
+            prediction.supporting_snps.
+        prediction: The already-computed TraitPrediction this card
+            reports on, embedded whole and unaltered.
+        limitation_keys: Stable, non-empty reference key(s) for
+            standing scientific caveats that must appear on every card
+            regardless of confidence tier (e.g. the ancestry-
+            generalizability caveat) -- never rendered prose. Always
+            non-empty; no code path produces a TraitCard without at
+            least one.
+    """
+
+    trait_id: str
+    trait_name: str
+    trait_evidence_refs: tuple[str, ...]
+    prediction: TraitPrediction
+    limitation_keys: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        """Enforce only the structural invariants named for this
+        entity, mirroring this codebase's consistent "structural-only,
+        no biological judgment" validation discipline
+        (TraitDefinition, SNPRecord, ConcordanceResult,
+        IdentityLikelihood):
+
+        - trait_id and trait_name must be non-empty after stripping
+          whitespace.
+        - trait_id must match prediction.trait_id -- a defensive
+          consistency check between the two independently-supplied
+          inputs this card pairs together; a mismatch here is a
+          construction-time caller defect (mirroring
+          concordance_calculator's own "unreachable configuration is a
+          bug, not a data condition" precedent), never a data
+          condition to silently resolve.
+        - limitation_keys must be a non-empty tuple, structurally
+          guaranteeing the Phase 2 requirement that every card carry at
+          least its standing scientific caveat reference(s) -- this is
+          the "construction-time error, a cheap, existing enforcement
+          mechanism" the Scientific Validation Strategy (Section 11)
+          explicitly calls for, applied here exactly as it already is
+          for IdentityLikelihood.methodology_caveat_key.
+
+        Raises:
+            ValueError: If trait_id or trait_name is empty/whitespace-
+                only, if trait_id does not match prediction.trait_id,
+                or if limitation_keys is empty.
+        """
+        if not self.trait_id.strip():
+            raise ValueError(
+                f"TraitCard.trait_id must be non-empty, got {self.trait_id!r}"
+            )
+        if not self.trait_name.strip():
+            raise ValueError(
+                f"TraitCard.trait_name must be non-empty, got "
+                f"{self.trait_name!r}"
+            )
+        if self.trait_id != self.prediction.trait_id:
+            raise ValueError(
+                f"TraitCard.trait_id ({self.trait_id!r}) must match "
+                f"TraitCard.prediction.trait_id "
+                f"({self.prediction.trait_id!r}); a mismatch indicates "
+                "the card was assembled from a TraitDefinition and a "
+                "TraitPrediction for two different traits."
+            )
+        if not self.limitation_keys:
+            raise ValueError(
+                "TraitCard.limitation_keys must be a non-empty tuple: "
+                "every card must carry at least its standing scientific "
+                "caveat reference key(s)."
+            )
