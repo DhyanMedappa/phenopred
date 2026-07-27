@@ -17,3 +17,11 @@ Thumbs.db
 
 # Docs temp
 My notes/
+
+# Phase 2 - Do not commit working docs
+docs/Mental architecture.txt
+docs/Step 1 integration decision.txt
+docs/architecture/PhenoPred_Phase2_Final_Architecture_Blueprint.md
+docs/architecture/~$
+docs/modules/Phase 1/
+docs/modules/Phase 2/
