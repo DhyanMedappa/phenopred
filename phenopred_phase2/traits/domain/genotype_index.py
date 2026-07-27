@@ -60,7 +60,7 @@ module.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import KeysView, Sequence
 
 from phenopred.domain.entities import DataRow
 from phenopred.domain.value_objects import ColumnLayout
@@ -140,6 +140,20 @@ class GenotypeIndex:
             if `rsid` was not observed in any row of this file.
         """
         return self._calls_by_rsid.get(rsid)
+
+    def keys(self) -> KeysView[str]:
+        """Return every RSID this file's GenotypeIndex holds a call for.
+
+        Per the approved Comparison Engine design specification, this is
+        the sole additive extension to GenotypeIndex required to support
+        Blueprint Section 10.4's genome-wide concordance check, which
+        must enumerate every RSID shared between two files' indexes --
+        an operation impossible against the original get()-only surface.
+        This method changes no existing behavior and introduces no new
+        classification logic; it exposes exactly the same keys already
+        computed and held by `get()`, `__contains__`, and `__len__`.
+        """
+        return self._calls_by_rsid.keys()
 
     def __contains__(self, rsid: str) -> bool:
         return rsid in self._calls_by_rsid

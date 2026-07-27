@@ -353,4 +353,4 @@ def test_genotype_index_exposes_no_mutation_method() -> None:
         name for name in dir(index) if not name.startswith("_")
     }
 
-    assert public_members == {"get"}
+    assert public_members == {"get", "keys"}
