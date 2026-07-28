@@ -172,16 +172,25 @@ def test_full_comparison_pipeline_lactase_persistence_agrees_across_both_files()
     )
 
 
-def test_full_comparison_pipeline_eye_colour_is_insufficient_data_on_both_sides() -> (
+def test_full_comparison_pipeline_eye_colour_reaches_a_real_agreement_classification() -> (
     None
 ):
-    # Regression guard, consistent with the already-documented
-    # eye_colour finding in test_trait_execution_pipeline.py: both real
-    # files' rs1800407 genotype ("CC") does not match SNP_REGISTRY's
-    # G/A definition for that locus, so EyeColourModel returns
-    # INSUFFICIENT_DATA on both sides -- the Comparison Engine must
-    # correctly classify this as INSUFFICIENT_DATA, never AGREE or
-    # DISAGREE.
+    # Previously, this test expected INSUFFICIENT_DATA on both sides,
+    # based on the earlier SNP_REGISTRY entry for rs1800407 (G/A),
+    # under which both real files' "CC" genotype was unrecognized. That
+    # entry has since been corrected (OCA2 is a minus-strand gene; the
+    # verified GRCh37 forward-strand pair is C/T), and EyeColourModel
+    # was separately replaced with the IrisPlex multinomial regression.
+    # Per test_trait_execution_pipeline.py, both real files' eye_colour
+    # prediction now individually reaches PREDICTED -- and
+    # trait_diff._classify_agreement() only returns INSUFFICIENT_DATA
+    # when at least one side's own prediction status is
+    # INSUFFICIENT_DATA, so that outcome is no longer reachable here.
+    # The actual classification (AGREE vs. DISAGREE) depends on whether
+    # both files' six IrisPlex loci happen to produce byte-identical
+    # probability strings, which is real data this test does not
+    # otherwise assert on -- so only that a genuine, non-exceptional
+    # classification is reached is verified here.
     use_case_a = _build_real_profile_file_use_case()
     use_case_b = _build_real_profile_file_use_case()
 
@@ -197,9 +206,9 @@ def test_full_comparison_pipeline_eye_colour_is_insufficient_data_on_both_sides(
         genotype_index_a, genotype_index_b, predictions_a, predictions_b
     )
 
-    assert (
-        report.trait_comparisons["eye_colour"].agreement
-        == TraitAgreement.INSUFFICIENT_DATA
+    assert report.trait_comparisons["eye_colour"].agreement in (
+        TraitAgreement.AGREE,
+        TraitAgreement.DISAGREE,
     )
 
 

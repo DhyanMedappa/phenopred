@@ -41,6 +41,22 @@ single-combined-genotype) -- this test asserts no logic specific to
 either file's identity, only that the pipeline produces well-formed,
 correctly-typed output for each of the two general layouts they
 represent.
+
+Eye colour note: an earlier version of this test carried a disclosed
+exception expecting eye_colour to be INSUFFICIENT_DATA against both
+real files, because rs1800407's real genotype ("CC") did not match
+SNP_REGISTRY's then-current G/A definition for that locus. That
+registry entry has since been corrected (OCA2 is a minus-strand gene;
+the verified GRCh37 forward-strand pair is C/T), and EyeColourModel's
+own implementation was separately replaced with the IrisPlex
+multinomial regression -- neither change alters which genotype shapes
+are recognized at any of the six required loci (both the old and new
+model derive their recognized shapes from the same
+SNP_REGISTRY.reference_allele/alternate_allele pair; only which allele
+is treated as "counted" differs). With the registry correction in
+place, "CC" is a legitimate, recognized homozygous-reference genotype
+at rs1800407, so eye_colour is now expected to reach PREDICTED here,
+consistent with the other four traits.
 """
 
 from __future__ import annotations
@@ -162,24 +178,24 @@ def test_full_pipeline_ancestrydna_produces_predictions_for_every_trait() -> (
 
     assert set(predictions.keys()) == set(TRAIT_REGISTRY.keys())
     # Every one of the 12 required RSIDs across all 5 traits is present
-    # somewhere in this real file (confirmed directly). Four traits
-    # reach a real PREDICTED outcome. eye_colour is a documented,
-    # disclosed exception: this real file's observed genotype at
-    # rs1800407 is "CC", which does not match SNP_REGISTRY's own
-    # reference/alternate allele definition for that locus (G/A) --
-    # EyeColourModel correctly refuses to guess and returns
-    # INSUFFICIENT_DATA rather than fabricate a result, exactly per its
-    # own frozen "never guess an unrecognized allele combination"
-    # contract. This is a genuine finding from this integration test,
-    # not a defect in TraitEngine, GenotypeIndex, or this milestone's
-    # own composition code -- see the implementation report's "Remaining
-    # risks" section.
-    for trait_id in ("lactase_persistence", "earwax_type", "actn3", "bitter_taste"):
+    # somewhere in this real file (confirmed directly). All five traits,
+    # including eye_colour, reach a real PREDICTED outcome -- see this
+    # file's module docstring ("Eye colour note") for why eye_colour no
+    # longer carries a disclosed INSUFFICIENT_DATA exception here: the
+    # SNP_REGISTRY correction for rs1800407 (OCA2 minus-strand fix, G/A
+    # -> C/T) already resolved the genotype mismatch that previously
+    # caused it, independent of the later IrisPlex model replacement.
+    for trait_id in (
+        "lactase_persistence",
+        "earwax_type",
+        "actn3",
+        "bitter_taste",
+        "eye_colour",
+    ):
         assert predictions[trait_id].status == PredictionStatus.PREDICTED, (
             f"{trait_id} unexpectedly INSUFFICIENT_DATA against the real "
             f"AncestryDNA file"
         )
-    assert predictions["eye_colour"].status == PredictionStatus.INSUFFICIENT_DATA
 
 
 def test_full_pipeline_ancestrydna_lactase_persistence_matches_known_genotype() -> (
@@ -216,17 +232,20 @@ def test_full_pipeline_23andme_produces_predictions_for_every_trait() -> None:
     predictions = run_trait_pipeline(profile_result)
 
     assert set(predictions.keys()) == set(TRAIT_REGISTRY.keys())
-    # Same documented eye_colour exception as the AncestryDNA test
-    # above -- this file's rs1800407 genotype is also "CC" against
-    # SNP_REGISTRY's G/A definition, so EyeColourModel correctly
-    # returns INSUFFICIENT_DATA here too, consistently across both
-    # independent real files.
-    for trait_id in ("lactase_persistence", "earwax_type", "actn3", "bitter_taste"):
+    # Same reasoning as the AncestryDNA test above -- eye_colour now
+    # reaches PREDICTED here too, consistently across both independent
+    # real files, following the SNP_REGISTRY rs1800407 correction.
+    for trait_id in (
+        "lactase_persistence",
+        "earwax_type",
+        "actn3",
+        "bitter_taste",
+        "eye_colour",
+    ):
         assert predictions[trait_id].status == PredictionStatus.PREDICTED, (
             f"{trait_id} unexpectedly INSUFFICIENT_DATA against the real "
             f"23andMe-format file"
         )
-    assert predictions["eye_colour"].status == PredictionStatus.INSUFFICIENT_DATA
 
 
 def test_full_pipeline_handles_real_no_call_and_indel_rows_without_crashing() -> (

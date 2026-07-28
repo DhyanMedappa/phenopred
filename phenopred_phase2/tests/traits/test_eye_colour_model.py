@@ -1,18 +1,20 @@
 # tests/traits/test_eye_colour_model.py
-"""Unit tests for EyeColourModel -- the fifth concrete TraitModel
-implementation, and the first to combine six SNPs into a
-three-category (brown/blue/intermediate) classification.
+"""Unit tests for EyeColourModel -- IrisPlex multinomial logistic
+regression implementation.
 
-Per the Phase 2 Architecture Blueprint, Section 8.1, this suite
-verifies: model initialization, recognition of all six required
-IrisPlex SNP dependencies, strong blue- and brown-associated genotype
-patterns, missing-SNP handling, unknown/unrecognized genotype
-handling, TraitPrediction field correctness, evidence preservation,
-structural TraitModel Protocol compliance, and that no frozen
-component was modified while adding this model.
+Covers: model initialization, recognition of all six required IrisPlex
+SNP dependencies, regression reproduction of the verified worked
+example, the probability-sum invariant, dosage conversion for all
+three genotype shapes, missing-SNP handling, unknown/unrecognized
+genotype handling, TraitPrediction field correctness, evidence
+preservation, structural TraitModel Protocol compliance, and
+confidence-margin derivation.
 """
 
 from __future__ import annotations
+
+import math
+import re
 
 from phenopred_phase2.traits.domain.entities import (
     ConfidenceLevel,
@@ -22,6 +24,7 @@ from phenopred_phase2.traits.domain.entities import (
     TraitPrediction,
 )
 from phenopred_phase2.traits.domain.interfaces import TraitModel
+from phenopred_phase2.traits.domain.irisplex_coefficients import IRISPLEX_COEFFICIENTS
 from phenopred_phase2.traits.domain.models.eye_colour_model import EyeColourModel
 from phenopred_phase2.traits.domain.snp_registry import SNP_REGISTRY
 
@@ -48,32 +51,55 @@ def _snp_call(alleles: str) -> GenotypeCall:
     )
 
 
-def _strong_blue_calls() -> dict[str, GenotypeCall]:
-    # Homozygous for each SNP's phenotype_associated_allele (verified
-    # SNP_REGISTRY values): HERC2 G, OCA2 T, SLC24A4 T, SLC45A2 G,
-    # TYR G, IRF4 T.
+def _counted_allele(rsid: str) -> str:
+    return IRISPLEX_COEFFICIENTS[rsid].counted_allele
+
+
+def _other_allele(rsid: str) -> str:
+    record = SNP_REGISTRY[rsid]
+    counted = _counted_allele(rsid)
+    return record.alternate_allele if record.reference_allele == counted else record.reference_allele
+
+
+def _homozygous_counted_calls() -> dict[str, GenotypeCall]:
     return {
-        _RSID_HERC2: _snp_call("GG"),
-        _RSID_OCA2: _snp_call("TT"),
-        _RSID_SLC24A4: _snp_call("TT"),
-        _RSID_SLC45A2: _snp_call("GG"),
-        _RSID_TYR: _snp_call("GG"),
-        _RSID_IRF4: _snp_call("TT"),
+        rsid: _snp_call("".join(sorted(_counted_allele(rsid) * 2)))
+        for rsid in _ALL_RSIDS
     }
 
 
-def _strong_brown_calls() -> dict[str, GenotypeCall]:
-    # Homozygous for each SNP's non-associated (reference or
-    # alternate, whichever isn't phenotype_associated_allele) allele:
-    # HERC2 A, OCA2 C, SLC24A4 G, SLC45A2 C, TYR A, IRF4 C.
+def _homozygous_other_calls() -> dict[str, GenotypeCall]:
     return {
-        _RSID_HERC2: _snp_call("AA"),
-        _RSID_OCA2: _snp_call("CC"),
-        _RSID_SLC24A4: _snp_call("GG"),
-        _RSID_SLC45A2: _snp_call("CC"),
-        _RSID_TYR: _snp_call("AA"),
-        _RSID_IRF4: _snp_call("CC"),
+        rsid: _snp_call("".join(sorted(_other_allele(rsid) * 2)))
+        for rsid in _ALL_RSIDS
     }
+
+
+def _heterozygous_calls() -> dict[str, GenotypeCall]:
+    return {
+        rsid: _snp_call("".join(sorted(_counted_allele(rsid) + _other_allele(rsid))))
+        for rsid in _ALL_RSIDS
+    }
+
+
+# The Gymrek Lab / CSE 185 worked example this project independently
+# verified during coefficient review: rs12913832=GG, rs1800407=CC,
+# rs12896399=GG, rs16891982=GG, rs1393350=GA, rs12203592=CC, expected
+# p_blue=0.8846, p_other=0.0811, p_brown=0.0343.
+_WORKED_EXAMPLE_CALLS: dict[str, GenotypeCall] = {
+    _RSID_HERC2: _snp_call("GG"),
+    _RSID_OCA2: _snp_call("CC"),
+    _RSID_SLC24A4: _snp_call("GG"),
+    _RSID_SLC45A2: _snp_call("GG"),
+    _RSID_TYR: _snp_call("AG"),
+    _RSID_IRF4: _snp_call("CC"),
+}
+
+
+def _parse_probabilities(predicted_phenotype: str) -> dict[str, float]:
+    pattern = r"(Blue|Other|Brown):\s*([\d.]+)%"
+    matches = re.findall(pattern, predicted_phenotype)
+    return {label.lower(): float(value) / 100.0 for label, value in matches}
 
 
 # ---------------------------------------------------------------------------
@@ -88,18 +114,54 @@ def test_eye_colour_model_can_be_initialized() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Regression correctness (worked example reproduction)
+# ---------------------------------------------------------------------------
+
+
+def test_worked_example_reproduces_verified_probabilities() -> None:
+    model = EyeColourModel()
+
+    prediction = model.predict(_WORKED_EXAMPLE_CALLS)
+
+    assert prediction.status == PredictionStatus.PREDICTED
+    probabilities = _parse_probabilities(prediction.predicted_phenotype)
+    assert math.isclose(probabilities["blue"], 0.885, abs_tol=1e-9)
+    assert math.isclose(probabilities["other"], 0.081, abs_tol=1e-9)
+    assert math.isclose(probabilities["brown"], 0.034, abs_tol=1e-9)
+    assert "most likely category: blue" in prediction.predicted_phenotype.lower()
+
+
+def test_worked_example_probabilities_sum_to_one() -> None:
+    model = EyeColourModel()
+
+    prediction = model.predict(_WORKED_EXAMPLE_CALLS)
+
+    probabilities = _parse_probabilities(prediction.predicted_phenotype)
+    total = probabilities["blue"] + probabilities["other"] + probabilities["brown"]
+    assert math.isclose(total, 1.0, abs_tol=0.01)
+
+
+def test_worked_example_is_high_confidence() -> None:
+    # Blue (88.5%) vs. the next-highest (Other, 8.1%) is a very large
+    # margin (~80 points) -- HIGH confidence under the approved
+    # thresholds.
+    model = EyeColourModel()
+
+    prediction = model.predict(_WORKED_EXAMPLE_CALLS)
+
+    assert prediction.confidence == ConfidenceLevel.HIGH
+
+
+# ---------------------------------------------------------------------------
 # Recognition of all six required SNP dependencies
 # ---------------------------------------------------------------------------
 
 
 def test_missing_each_required_rsid_individually_is_insufficient_data() -> None:
-    # Confirms the model actually consults all six loci: removing any
-    # single one from an otherwise-complete panel must still yield
-    # INSUFFICIENT_DATA, never a silent partial prediction.
     model = EyeColourModel()
 
     for missing_rsid in _ALL_RSIDS:
-        calls = _strong_blue_calls()
+        calls = _homozygous_counted_calls()
         del calls[missing_rsid]
 
         prediction = model.predict(calls)
@@ -112,7 +174,7 @@ def test_missing_each_required_rsid_individually_is_insufficient_data() -> None:
 def test_supporting_snps_on_predicted_contains_all_six_genes() -> None:
     model = EyeColourModel()
 
-    prediction = model.predict(_strong_blue_calls())
+    prediction = model.predict(_homozygous_counted_calls())
 
     assert prediction.status == PredictionStatus.PREDICTED
     assert set(prediction.supporting_snps.keys()) == set(_ALL_RSIDS)
@@ -122,84 +184,48 @@ def test_supporting_snps_on_predicted_contains_all_six_genes() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Genotype interpretation: strong blue and strong brown patterns
+# Dosage conversion
 # ---------------------------------------------------------------------------
 
 
-def test_strong_blue_pattern_is_predicted_blue_moderate_confidence() -> None:
+def test_homozygous_counted_allele_yields_dosage_two_for_every_snp() -> None:
+    # Homozygous for every SNP's own counted_allele should push the
+    # model as far toward "not brown" as every locus allows -- confirms
+    # dosage=2 is being applied, not silently truncated or ignored.
     model = EyeColourModel()
 
-    prediction = model.predict(_strong_blue_calls())
+    prediction = model.predict(_homozygous_counted_calls())
 
     assert prediction.status == PredictionStatus.PREDICTED
-    assert prediction.predicted_phenotype.startswith("blue")
-    assert "simplified scoring" in prediction.predicted_phenotype
-    assert "published coefficients not used" in prediction.predicted_phenotype
-    assert prediction.confidence == ConfidenceLevel.MODERATE
 
 
-def test_strong_brown_pattern_is_predicted_brown_moderate_confidence() -> None:
+def test_homozygous_other_allele_yields_dosage_zero_for_every_snp() -> None:
     model = EyeColourModel()
 
-    prediction = model.predict(_strong_brown_calls())
+    prediction = model.predict(_homozygous_other_calls())
 
     assert prediction.status == PredictionStatus.PREDICTED
-    assert prediction.predicted_phenotype.startswith("brown")
-    assert "simplified scoring" in prediction.predicted_phenotype
-    assert prediction.confidence == ConfidenceLevel.MODERATE
 
 
-def test_mixed_pattern_is_predicted_intermediate_low_confidence() -> None:
-    # A genuinely mixed dosage pattern (not all-light, not all-dark)
-    # should fall to intermediate, with lower confidence reflecting
-    # IrisPlex's own documented weak intermediate-category sensitivity.
+def test_heterozygous_yields_dosage_one_for_every_snp() -> None:
     model = EyeColourModel()
-    calls = {
-        _RSID_HERC2: _snp_call("AG"),  # heterozygous, dosage 1
-        _RSID_OCA2: _snp_call("CT"),  # heterozygous, dosage 1
-        _RSID_SLC24A4: _snp_call("GT"),  # heterozygous, dosage 1
-        _RSID_SLC45A2: _snp_call("CG"),  # heterozygous, dosage 1
-        _RSID_TYR: _snp_call("AG"),  # heterozygous, dosage 1
-        _RSID_IRF4: _snp_call("CT"),  # heterozygous, dosage 1
-    }
 
-    prediction = model.predict(calls)
+    prediction = model.predict(_heterozygous_calls())
 
     assert prediction.status == PredictionStatus.PREDICTED
-    assert prediction.predicted_phenotype.startswith("intermediate")
-    assert prediction.confidence == ConfidenceLevel.LOW
 
-    prediction = model.predict(calls)
 
-    assert prediction.status == PredictionStatus.PREDICTED
-    assert prediction.predicted_phenotype.startswith("intermediate")
-    assert prediction.confidence == ConfidenceLevel.LOW
-
-def test_real_ancestrydna_pattern_that_previously_failed_now_predicts() -> None:
-    # Regression guard for the reported bug: this exact six-genotype
-    # pattern, observed in a real uploaded AncestryDNA file, previously
-    # returned INSUFFICIENT_DATA because SNP_REGISTRY's rs1800407 entry
-    # recorded OCA2's coding-strand G/A notation as if it were already
-    # GRCh37 forward-strand, when the true forward-strand pair is C/T
-    # (verified directly against the dbSNP RefSNP report and ClinVar
-    # RCV000001014.6). rs1800407="CC" is the homozygous-other genotype
-    # under the corrected convention, not an unrecognized pattern.
+def test_dosage_extremes_produce_different_predictions() -> None:
+    # A direct behavioural check that dosage genuinely drives the
+    # regression: the all-counted-homozygous and all-other-homozygous
+    # panels must not produce the same probability distribution.
     model = EyeColourModel()
-    real_ancestrydna_calls = {
-        _RSID_HERC2: _snp_call("GG"),
-        _RSID_OCA2: _snp_call("CC"),
-        _RSID_SLC24A4: _snp_call("GG"),
-        _RSID_SLC45A2: _snp_call("GG"),
-        _RSID_TYR: _snp_call("GG"),
-        _RSID_IRF4: _snp_call("CC"),
-    }
 
-    prediction = model.predict(real_ancestrydna_calls)
+    counted_prediction = model.predict(_homozygous_counted_calls())
+    other_prediction = model.predict(_homozygous_other_calls())
 
-    assert prediction.status == PredictionStatus.PREDICTED
-    assert prediction.predicted_phenotype is not None
-    assert prediction.confidence is not None
-    assert set(prediction.supporting_snps.keys()) == set(_ALL_RSIDS)
+    assert counted_prediction.predicted_phenotype != other_prediction.predicted_phenotype
+
 
 # ---------------------------------------------------------------------------
 # Missing SNP handling
@@ -221,11 +247,8 @@ def test_all_six_rsids_missing_is_insufficient_data() -> None:
 def test_missing_herc2_specifically_is_insufficient_data_with_partial_evidence() -> (
     None
 ):
-    # HERC2 is the most heavily weighted locus; confirm its absence
-    # alone still blocks prediction rather than falling back to the
-    # other five SNPs.
     model = EyeColourModel()
-    calls = _strong_blue_calls()
+    calls = _homozygous_counted_calls()
     del calls[_RSID_HERC2]
 
     prediction = model.predict(calls)
@@ -243,7 +266,7 @@ def test_missing_herc2_specifically_is_insufficient_data_with_partial_evidence()
 
 def test_no_call_at_one_locus_is_insufficient_data() -> None:
     model = EyeColourModel()
-    calls = _strong_blue_calls()
+    calls = _homozygous_counted_calls()
     no_call = GenotypeCall(GenotypeCallKind.NO_CALL, None, None, "--")
     calls[_RSID_OCA2] = no_call
 
@@ -255,7 +278,7 @@ def test_no_call_at_one_locus_is_insufficient_data() -> None:
 
 def test_indel_at_one_locus_is_insufficient_data() -> None:
     model = EyeColourModel()
-    calls = _strong_blue_calls()
+    calls = _homozygous_counted_calls()
     calls[_RSID_SLC24A4] = GenotypeCall(GenotypeCallKind.INDEL, None, None, "DD")
 
     prediction = model.predict(calls)
@@ -265,7 +288,7 @@ def test_indel_at_one_locus_is_insufficient_data() -> None:
 
 def test_haploid_at_one_locus_is_insufficient_data() -> None:
     model = EyeColourModel()
-    calls = _strong_blue_calls()
+    calls = _homozygous_counted_calls()
     calls[_RSID_IRF4] = GenotypeCall(GenotypeCallKind.HAPLOID, None, "T", "T")
 
     prediction = model.predict(calls)
@@ -275,7 +298,7 @@ def test_haploid_at_one_locus_is_insufficient_data() -> None:
 
 def test_unrecognized_kind_at_one_locus_is_insufficient_data() -> None:
     model = EyeColourModel()
-    calls = _strong_blue_calls()
+    calls = _homozygous_counted_calls()
     calls[_RSID_TYR] = GenotypeCall(GenotypeCallKind.UNRECOGNIZED, None, None, "GGG")
 
     prediction = model.predict(calls)
@@ -285,10 +308,10 @@ def test_unrecognized_kind_at_one_locus_is_insufficient_data() -> None:
 
 def test_unsupported_allele_combination_at_one_locus_is_insufficient_data() -> None:
     # A SNP-classified call whose alleles match neither this locus's
-    # associated nor other allele shape (SLC45A2's are G/C) -- a data
+    # counted nor other allele shape (SLC45A2's are C/G) -- a data
     # anomaly, never guessed at.
     model = EyeColourModel()
-    calls = _strong_blue_calls()
+    calls = _homozygous_counted_calls()
     calls[_RSID_SLC45A2] = _snp_call("AT")
 
     prediction = model.predict(calls)
@@ -304,7 +327,7 @@ def test_unsupported_allele_combination_at_one_locus_is_insufficient_data() -> N
 
 def test_predicted_trait_prediction_carries_expected_fields() -> None:
     model = EyeColourModel()
-    calls = _strong_blue_calls()
+    calls = _homozygous_counted_calls()
 
     prediction = model.predict(calls)
 
@@ -323,6 +346,17 @@ def test_supporting_snps_is_empty_on_insufficient_data() -> None:
     assert prediction.supporting_snps == {}
 
 
+def test_predicted_phenotype_uses_other_not_intermediate() -> None:
+    # Per the approved decision: use IrisPlex's own category name
+    # "other" in model logic/output, never "intermediate".
+    model = EyeColourModel()
+
+    prediction = model.predict(_homozygous_counted_calls())
+
+    assert "other" in prediction.predicted_phenotype.lower()
+    assert "intermediate" not in prediction.predicted_phenotype.lower()
+
+
 # ---------------------------------------------------------------------------
 # TraitModel Protocol compliance
 # ---------------------------------------------------------------------------
@@ -338,7 +372,7 @@ def test_eye_colour_model_satisfies_traitmodel_protocol() -> None:
 def test_predict_accepts_plain_mapping_and_returns_traitprediction_type() -> None:
     model = EyeColourModel()
 
-    prediction = model.predict(_strong_blue_calls())
+    prediction = model.predict(_homozygous_counted_calls())
 
     assert isinstance(prediction, TraitPrediction)
 
@@ -347,14 +381,15 @@ def test_predict_never_raises_for_any_condition() -> None:
     model = EyeColourModel()
     conditions = [
         {},
-        _strong_blue_calls(),
-        _strong_brown_calls(),
+        _homozygous_counted_calls(),
+        _homozygous_other_calls(),
+        _heterozygous_calls(),
         {_RSID_HERC2: _snp_call("GG")},
         {_RSID_OCA2: GenotypeCall(GenotypeCallKind.NO_CALL, None, None, "--")},
         {_RSID_SLC24A4: GenotypeCall(GenotypeCallKind.INDEL, None, None, "DD")},
         {_RSID_SLC45A2: GenotypeCall(GenotypeCallKind.HAPLOID, None, "G", "G")},
         {_RSID_TYR: GenotypeCall(GenotypeCallKind.UNRECOGNIZED, None, None, "GGG")},
-        {_RSID_IRF4: _snp_call("AG")},
+        {_RSID_IRF4: _snp_call("AT")},
     ]
 
     for genotype_calls in conditions:

@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from phenopred_phase2.reporting.entities import PhenoPredReport
 from phenopred_phase2.traits.domain.trait_registry import TRAIT_REGISTRY
 from phenopred_phase2.webapp import composition
@@ -54,7 +56,7 @@ def test_profile_file_delegates_to_composition_root(monkeypatch) -> None:
 
     result = composition.profile_file("some/path.txt")
 
-    assert fake_use_case.executed_with == "some/path.txt"
+    assert fake_use_case.executed_with == Path("some/path.txt")
     assert result is fake_result
 
 
@@ -92,7 +94,7 @@ def test_run_single_file_pipeline_wires_profile_file_and_build_report(
 
     report = composition.run_single_file_pipeline("a.txt")
 
-    assert fake_use_case.executed_with == "a.txt"
+    assert fake_use_case.executed_with == Path("a.txt")
     assert isinstance(report, PhenoPredReport)
     assert report.file_a_profiling_report is fake_result["report"]
     assert set(report.file_a_trait_cards.keys()) == set(TRAIT_REGISTRY.keys())
@@ -105,7 +107,7 @@ class _FakeTwoFileUseCase:
 
     def execute(self, file_path):
         self.executed_with.append(file_path)
-        return self._results_by_path[file_path]
+        return self._results_by_path[str(file_path)]
 
 
 def test_run_two_file_pipeline_assembles_a_combined_report(monkeypatch) -> None:
@@ -118,7 +120,7 @@ def test_run_two_file_pipeline_assembles_a_combined_report(monkeypatch) -> None:
 
     report = composition.run_two_file_pipeline("a.txt", "b.txt")
 
-    assert fake_use_case.executed_with == ["a.txt", "b.txt"]
+    assert fake_use_case.executed_with == [Path("a.txt"), Path("b.txt")]
     assert isinstance(report, PhenoPredReport)
     assert report.file_a_profiling_report is result_a["report"]
     assert report.file_b_profiling_report is result_b["report"]
