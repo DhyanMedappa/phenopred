@@ -50,11 +50,11 @@ def _snp_call(alleles: str) -> GenotypeCall:
 
 def _strong_blue_calls() -> dict[str, GenotypeCall]:
     # Homozygous for each SNP's phenotype_associated_allele (verified
-    # SNP_REGISTRY values): HERC2 G, OCA2 A, SLC24A4 T, SLC45A2 G,
+    # SNP_REGISTRY values): HERC2 G, OCA2 T, SLC24A4 T, SLC45A2 G,
     # TYR G, IRF4 T.
     return {
         _RSID_HERC2: _snp_call("GG"),
-        _RSID_OCA2: _snp_call("AA"),
+        _RSID_OCA2: _snp_call("TT"),
         _RSID_SLC24A4: _snp_call("TT"),
         _RSID_SLC45A2: _snp_call("GG"),
         _RSID_TYR: _snp_call("GG"),
@@ -65,10 +65,10 @@ def _strong_blue_calls() -> dict[str, GenotypeCall]:
 def _strong_brown_calls() -> dict[str, GenotypeCall]:
     # Homozygous for each SNP's non-associated (reference or
     # alternate, whichever isn't phenotype_associated_allele) allele:
-    # HERC2 A, OCA2 G, SLC24A4 G, SLC45A2 C, TYR A, IRF4 C.
+    # HERC2 A, OCA2 C, SLC24A4 G, SLC45A2 C, TYR A, IRF4 C.
     return {
         _RSID_HERC2: _snp_call("AA"),
-        _RSID_OCA2: _snp_call("GG"),
+        _RSID_OCA2: _snp_call("CC"),
         _RSID_SLC24A4: _snp_call("GG"),
         _RSID_SLC45A2: _snp_call("CC"),
         _RSID_TYR: _snp_call("AA"),
@@ -156,7 +156,7 @@ def test_mixed_pattern_is_predicted_intermediate_low_confidence() -> None:
     model = EyeColourModel()
     calls = {
         _RSID_HERC2: _snp_call("AG"),  # heterozygous, dosage 1
-        _RSID_OCA2: _snp_call("AG"),  # heterozygous, dosage 1
+        _RSID_OCA2: _snp_call("CT"),  # heterozygous, dosage 1
         _RSID_SLC24A4: _snp_call("GT"),  # heterozygous, dosage 1
         _RSID_SLC45A2: _snp_call("CG"),  # heterozygous, dosage 1
         _RSID_TYR: _snp_call("AG"),  # heterozygous, dosage 1
@@ -169,6 +169,37 @@ def test_mixed_pattern_is_predicted_intermediate_low_confidence() -> None:
     assert prediction.predicted_phenotype.startswith("intermediate")
     assert prediction.confidence == ConfidenceLevel.LOW
 
+    prediction = model.predict(calls)
+
+    assert prediction.status == PredictionStatus.PREDICTED
+    assert prediction.predicted_phenotype.startswith("intermediate")
+    assert prediction.confidence == ConfidenceLevel.LOW
+
+def test_real_ancestrydna_pattern_that_previously_failed_now_predicts() -> None:
+    # Regression guard for the reported bug: this exact six-genotype
+    # pattern, observed in a real uploaded AncestryDNA file, previously
+    # returned INSUFFICIENT_DATA because SNP_REGISTRY's rs1800407 entry
+    # recorded OCA2's coding-strand G/A notation as if it were already
+    # GRCh37 forward-strand, when the true forward-strand pair is C/T
+    # (verified directly against the dbSNP RefSNP report and ClinVar
+    # RCV000001014.6). rs1800407="CC" is the homozygous-other genotype
+    # under the corrected convention, not an unrecognized pattern.
+    model = EyeColourModel()
+    real_ancestrydna_calls = {
+        _RSID_HERC2: _snp_call("GG"),
+        _RSID_OCA2: _snp_call("CC"),
+        _RSID_SLC24A4: _snp_call("GG"),
+        _RSID_SLC45A2: _snp_call("GG"),
+        _RSID_TYR: _snp_call("GG"),
+        _RSID_IRF4: _snp_call("CC"),
+    }
+
+    prediction = model.predict(real_ancestrydna_calls)
+
+    assert prediction.status == PredictionStatus.PREDICTED
+    assert prediction.predicted_phenotype is not None
+    assert prediction.confidence is not None
+    assert set(prediction.supporting_snps.keys()) == set(_ALL_RSIDS)
 
 # ---------------------------------------------------------------------------
 # Missing SNP handling

@@ -214,13 +214,19 @@ def test_snp_registry_iris_plex_rs12913832_entry_has_expected_values() -> None:
 
 
 def test_snp_registry_iris_plex_rs1800407_entry_has_expected_values() -> None:
+    # Regression guard: OCA2 is a minus-strand gene. This entry was
+    # corrected from a coding-strand G/A notation (Andersen et al. 2016)
+    # to the verified GRCh37 forward-strand C/T representation, per
+    # direct dbSNP RefSNP/ClinVar verification (RCV000001014.6, allele
+    # T) -- the same class of correction already applied to HERC2 and
+    # SLC45A2.
     record = SNP_REGISTRY.get("rs1800407")
 
     assert record is not None
     assert record.gene == "OCA2"
-    assert record.reference_allele == "G"
-    assert record.alternate_allele == "A"
-    assert record.phenotype_associated_allele == "A"
+    assert record.reference_allele == "C"
+    assert record.alternate_allele == "T"
+    assert record.phenotype_associated_allele == "T"
 
 
 def test_snp_registry_iris_plex_rs12896399_entry_has_expected_values() -> None:

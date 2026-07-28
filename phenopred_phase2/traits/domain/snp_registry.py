@@ -275,15 +275,25 @@ _RECORDS: tuple[SNPRecord, ...] = (
     SNPRecord(
         rsid="rs1800407",
         gene="OCA2",
-        reference_allele="G",
-        alternate_allele="A",
-        phenotype_associated_allele="A",
+        reference_allele="C",
+        alternate_allele="T",
+        phenotype_associated_allele="T",
         citation=(
-            "GRCh37 forward-strand allele convention confirmed via "
-            "peer-reviewed source (Andersen et al. 2016, Mol Genet "
-            "Genomic Med: 'OCA2:rs1800407:G>A (p.Arg419Gln)'); A allele "
-            "associated with increased odds of green/hazel eye colour "
-            "(Phase 2 Architecture Blueprint, Section 8.1)."
+            "GRCh37 forward-strand locus NC_000015.9:g.28230318C>T, "
+            "verified directly against the dbSNP RefSNP report's Genomic "
+            "Placements table and its linked ClinVar record "
+            "(RCV000001014.6, 'SKIN/HAIR/EYE PIGMENTATION 1, BLUE/NONBLUE "
+            "EYES', allele T); OCA2 is a minus-strand gene, so the "
+            "widely-cited Andersen et al. 2016 'G>A' notation "
+            "(NG_009846.2:g.119143G>A, RefSeqGene/coding strand) requires "
+            "reverse-complementing to reach the GRCh37 forward-strand "
+            "representation used here -- this entry was previously "
+            "recorded using that coding-strand notation as if already "
+            "forward-strand, the same class of error already reconciled "
+            "for HERC2 and SLC45A2; T allele associated with increased "
+            "odds of green/hazel eye colour (Andersen et al. 2016) and "
+            "flagged by ClinVar as affecting blue/non-blue eye "
+            "pigmentation (Phase 2 Architecture Blueprint, Section 8.1)."
         ),
     ),
     SNPRecord(

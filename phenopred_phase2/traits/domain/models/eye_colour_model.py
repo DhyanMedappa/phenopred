@@ -163,6 +163,17 @@ def _light_allele_dosage(call: GenotypeCall | None, record: SNPRecord) -> int | 
         return 1
     if call.alleles == homozygous_other:
         return 0
+
+    print(
+    "FAILED:",
+    record.rsid,
+    "call:",
+    call.alleles,
+    "associated:",
+    associated_allele,
+    "other:",
+    other_allele
+    )
     return None
 
 
