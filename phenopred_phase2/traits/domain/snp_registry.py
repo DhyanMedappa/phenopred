@@ -263,13 +263,8 @@ _RECORDS: tuple[SNPRecord, ...] = (
         alternate_allele="G",
         phenotype_associated_allele="G",
         citation=(
-            "GRCh37 forward-strand locus NC_000015.9:g.28365618A>G "
-            "(dbSNP RefSNP report; ClinVar RCV000005011, associated "
-            "with blue/non-blue eye pigmentation); historically cited "
-            "as C/T on the gene-relative strand in the original Sturm "
-            "et al. 2008 and Eiberg et al. 2008 discovery papers -- "
-            "reconciled, not contradictory (Phase 2 Architecture "
-            "Blueprint, Section 8.1)."
+            "Walsh et al. (2011) IrisPlex eye-colour prediction model; "
+            "variant information cross-checked with dbSNP/ClinVar."
         ),
     ),
     SNPRecord(
@@ -279,21 +274,8 @@ _RECORDS: tuple[SNPRecord, ...] = (
         alternate_allele="T",
         phenotype_associated_allele="T",
         citation=(
-            "GRCh37 forward-strand locus NC_000015.9:g.28230318C>T, "
-            "verified directly against the dbSNP RefSNP report's Genomic "
-            "Placements table and its linked ClinVar record "
-            "(RCV000001014.6, 'SKIN/HAIR/EYE PIGMENTATION 1, BLUE/NONBLUE "
-            "EYES', allele T); OCA2 is a minus-strand gene, so the "
-            "widely-cited Andersen et al. 2016 'G>A' notation "
-            "(NG_009846.2:g.119143G>A, RefSeqGene/coding strand) requires "
-            "reverse-complementing to reach the GRCh37 forward-strand "
-            "representation used here -- this entry was previously "
-            "recorded using that coding-strand notation as if already "
-            "forward-strand, the same class of error already reconciled "
-            "for HERC2 and SLC45A2; T allele associated with increased "
-            "odds of green/hazel eye colour (Andersen et al. 2016) and "
-            "flagged by ClinVar as affecting blue/non-blue eye "
-            "pigmentation (Phase 2 Architecture Blueprint, Section 8.1)."
+            "Andersen et al. (2016) eye pigmentation study; "
+            "allele representation verified using dbSNP/ClinVar records."
         ),
     ),
     SNPRecord(
@@ -303,12 +285,8 @@ _RECORDS: tuple[SNPRecord, ...] = (
         alternate_allele="T",
         phenotype_associated_allele="T",
         citation=(
-            "GRCh37 forward-strand locus NC_000014.8:g.92773663G>T "
-            "(dbSNP RefSNP report; dbSNP also lists a rarer G>A variant "
-            "at this position, not the IrisPlex-relevant allele); T "
-            "allele associated with blue eye colour across multiple "
-            "independent studies (Phase 2 Architecture Blueprint, "
-            "Section 8.1)."
+            "Walsh et al. (2011) IrisPlex model; "
+            "SLC24A4 pigmentation variant information verified with dbSNP."
         ),
     ),
     SNPRecord(
@@ -318,15 +296,8 @@ _RECORDS: tuple[SNPRecord, ...] = (
         alternate_allele="G",
         phenotype_associated_allele="G",
         citation=(
-            "GRCh37 forward-strand locus NC_000005.9:g.33951693C>G, "
-            "verified directly against the dbSNP RefSNP report's "
-            "Genomic Placements table (SLC45A2 is a minus-strand gene; "
-            "the widely-cited c.1122C>G coding-strand notation was "
-            "independently confirmed to coincide with, not require "
-            "reverse-complementing from, the GRCh37 forward-strand "
-            "representation); G allele (F374L) associated with light "
-            "skin, hair, and eye colour (Phase 2 Architecture Blueprint, "
-            "Section 8.1)."
+            "Walsh et al. (2011) IrisPlex model; "
+            "SLC45A2 pigmentation association verified with dbSNP records."
         ),
     ),
     SNPRecord(
@@ -336,14 +307,8 @@ _RECORDS: tuple[SNPRecord, ...] = (
         alternate_allele="A",
         phenotype_associated_allele="G",
         citation=(
-            "Reference/alternate allele from a peer-reviewed source "
-            "(Andersen et al. 2016: 'rs1393350:G>A'), cross-validated "
-            "against independently-fetched dbSNP data on co-listed "
-            "SNPs; TYR is a forward-strand gene, so no complement "
-            "conversion applies. Phenotype direction explicitly sourced: "
-            "'the A allele enriched in green eyes and the G allele in "
-            "blue' (peer-reviewed comparative GWAS, Scientific Reports) "
-            "(Phase 2 Architecture Blueprint, Section 8.1)."
+            "Andersen et al. (2016) eye pigmentation study; "
+            "TYR variant association cross-checked with dbSNP."
         ),
     ),
     SNPRecord(
@@ -353,12 +318,8 @@ _RECORDS: tuple[SNPRecord, ...] = (
         alternate_allele="T",
         phenotype_associated_allele="T",
         citation=(
-            "C is the ancestral allele (monomorphic in African/East "
-            "Asian populations); the derived T allele is statistically "
-            "associated with light eye colour, dark hair colour, and "
-            "decreased tanning ability, confirmed via multiple "
-            "independent sources (Phase 2 Architecture Blueprint, "
-            "Section 8.1)."
+            "IrisPlex eye-colour model (Walsh et al., 2011); "
+            "IRF4 pigmentation association reported in pigmentation studies."
         ),
     ),
 )
