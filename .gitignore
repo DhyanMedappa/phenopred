@@ -3,8 +3,14 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+*.egg-info/
 .venv/
 phenopred-env/
+
+# Data - DO NOT COMMIT
+data/
+!data/.gitkeep
+data/raw/
 
 # IDE / OS
 .vscode/
@@ -18,9 +24,6 @@ My notes/
 # Phase 2 - Do not commit working docs
 docs/Mental architecture.txt
 docs/Step 1 integration decision.txt
-
-docs/architecture/~$
+docs/architecture/~$*
 docs/modules/Phase 1/
 docs/modules/Phase 2/
-
-data/raw/
