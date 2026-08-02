@@ -1,7 +1,7 @@
 ## License
     Copyright 2026 DhyanMedappa. All Rights Reserved. 
     This code is provided for viewing purposes only. No use, copying, or distribution permitted without written permission.
-    
+
 # PhenoPred
 
 **PhenoPred** is an end-to-end genomic analytics pipeline that transforms raw, heterogeneous consumer DNA export files (AncestryDNA, 23andMe) into validated, interpretable, and explainable phenotype insights. The project was built around a deliberately narrow but important premise: genomic trait prediction is scientifically straightforward once the underlying data is clean, well-typed, and traceable — but almost every hobby-scale "DNA trait predictor" skips that part entirely. PhenoPred does not. It is a layered software system — file profiling and format detection, genotype normalization, a centralized and citation-backed SNP registry, a registry-driven trait prediction engine, a cross-dataset concordance and comparison engine, structured reporting, and an interactive Streamlit application — built with the explicit engineering discipline of a production system, not a notebook script. Every prediction the system produces is either backed by sufficient genetic evidence and clearly attributed to its scientific source, or the system says so and declines to guess. This project was developed as an MSc Applied Data Science & AI thesis project, and its primary contribution is not any single trait model — it is the reproducible, responsible pipeline architecture around it.
@@ -87,27 +87,29 @@ Every trait model requires its full set of SNPs. If any required SNP is missing,
 ---
 
 ## Repository Structure
-phenopred/ # Architecture V1 — ingestion, profiling, quality checks (frozen)
-├── domain/ # Entities, value objects, quality-check and profiler interfaces
-├── application/ # ProfileFileUseCase, composition root
-└── infrastructure/ # File I/O, report serialization
 
-phenopred_phase2/ # Phase 2 — prediction, comparison, reporting, application
+```text
+phenopred/                        # Architecture V1 — ingestion, profiling, quality checks (frozen)
+├── domain/                       # Entities, value objects, quality-check and profiler interfaces
+├── application/                  # ProfileFileUseCase, composition root
+└── infrastructure/               # File I/O, report serialization
+
+phenopred_phase2/                 # Phase 2 — prediction, comparison, reporting, application
 ├── traits/
-│ ├── domain/
-│ │ ├── entities.py # GenotypeCall, TraitPrediction, TraitCard, ConfidenceLevel, ...
-│ │ ├── snp_registry.py # Closed, static, citation-backed SNP reference table
-│ │ ├── irisplex_coefficients.py # IrisPlex regression coefficient table
-│ │ ├── trait_registry.py # Declarative TraitDefinition entries
-│ │ ├── genotype_index.py # RSID → GenotypeCall adapter over V1 output
-│ │ └── models/ # One independent TraitModel per trait
-│ └── application/ # TraitEngine, trait pipeline composition
+│   ├── domain/
+│   │   ├── entities.py           # GenotypeCall, TraitPrediction, TraitCard, ConfidenceLevel, ...
+│   │   ├── snp_registry.py       # Closed, static, citation-backed SNP reference table
+│   │   ├── irisplex_coefficients.py # IrisPlex regression coefficient table
+│   │   ├── trait_registry.py     # Declarative TraitDefinition entries
+│   │   ├── genotype_index.py     # RSID → GenotypeCall adapter over V1 output
+│   │   └── models/               # One independent TraitModel per trait
+│   └── application/              # TraitEngine, trait pipeline composition
 ├── comparison/
-│ ├── domain/ # Concordance calculator, identity heuristic, trait diff
-│ └── application/ # Comparison Engine orchestration
-├── reporting/ # PhenoPredReport, report builder, JSON serializer
-├── webapp/ # Streamlit application and its composition layer
-└── tests/ # Unit tests (per component) and integration tests (real files)
+│   ├── domain/                   # Concordance calculator, identity heuristic, trait diff
+│   └── application/              # Comparison Engine orchestration
+├── reporting/                    # PhenoPredReport, report builder, JSON serializer
+├── webapp/                       # Streamlit application and its composition layer
+└── tests/                        # Unit tests (per component) and integration tests (real files)
 
 ---
 
