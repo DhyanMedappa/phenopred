@@ -5,6 +5,20 @@
 
 ---
 
+## Screenshots
+
+![Streamlit landing page — file upload](docs/streamlit/streamlit-landing-page.png)
+
+![Dataset quality summary panel](docs/streamlit/data-quality-summary-panel.png)
+
+![Trait prediction card — eye colour](docs/streamlit/trait-card-eye-colour.png)
+
+![Trait prediction card — lactase](docs/streamlit/trait-card-lactase.png)
+
+![Two-dataset comparison dashboard](docs/streamlit/comparison-dashboard.png)
+
+---
+
 ## Features
 
 - **Consumer DNA file support** — ingests raw AncestryDNA and 23andMe genotype exports, including both two-column-allele and single-combined-genotype file layouts, without manual configuration.
@@ -160,20 +174,6 @@ phenopred_phase2/                 # Phase 2 — prediction, comparison, reportin
 - Broader ancestry representation in underlying trait-association evidence.
 - Support for additional consumer DNA export formats and genome builds.
 - Expanded automated data-quality diagnostics for consumer file edge cases.
-
----
-
-## Screenshots
-
-![Streamlit landing page — file upload](docs/streamlit/streamlit-landing-page.png)
-
-![Dataset quality summary panel](docs/streamlit/data-quality-summary-panel.png)
-
-![Trait prediction card — eye colour](docs/streamlit/trait-card-eye-colour.png)
-
-![Trait prediction card — lactase](docs/streamlit/trait-card-lactase.png)
-
-![Two-dataset comparison dashboard](docs/streamlit/comparison-dashboard.png)
 
 ---
 
