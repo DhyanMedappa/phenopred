@@ -161,15 +161,17 @@ phenopred_phase2/ # Phase 2 — prediction, comparison, reporting, application
 
 ## Screenshots
 
-![Streamlit landing page — file upload](docs/streamlit/Streamlit landing page-file upload.png)
+## Screenshots
 
-![Dataset quality summary panel](docs/streamlit/Data quality summary panel.png)
+![Streamlit landing page — file upload](docs/streamlit/streamlit-landing-page.png)
 
-![Trait prediction card — eye colour](docs/streamlit/trait prediction card- eye colour.png)
+![Dataset quality summary panel](docs/streamlit/data-quality-summary-panel.png)
 
-![Trait prediction card — lactase](docs/streamlit/trait prediction card- lactase.png)
+![Trait prediction card — eye colour](docs/streamlit/trait-card-eye-colour.png)
 
-![Two-dataset comparison dashboard](docs/streamlit/Two dataset comparison dashboard.png)
+![Trait prediction card — lactase](docs/streamlit/trait-card-lactase.png)
+
+![Two-dataset comparison dashboard](docs/streamlit/comparison-dashboard.png)
 
 ---
 
