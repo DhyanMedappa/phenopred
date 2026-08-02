@@ -1,6 +1,3 @@
-## License
-    Copyright 2026 DhyanMedappa. All Rights Reserved. 
-    This code is provided for viewing purposes only. No use, copying, or distribution permitted without written permission.
 
 # PhenoPred
 
@@ -111,6 +108,7 @@ phenopred_phase2/                 # Phase 2 — prediction, comparison, reportin
 ├── webapp/                       # Streamlit application and its composition layer
 └── tests/                        # Unit tests (per component) and integration tests (real files)
 
+```
 ---
 
 ## Workflow
@@ -164,8 +162,6 @@ phenopred_phase2/                 # Phase 2 — prediction, comparison, reportin
 - Expanded automated data-quality diagnostics for consumer file edge cases.
 
 ---
-
-## Screenshots
 
 ## Screenshots
 
@@ -228,4 +224,4 @@ From a software engineering perspective, PhenoPred is deliberately structured to
 
 ## License
 
-*License to be added.*
+*Copyright 2026 DhyanMedappa. All Rights Reserved. This code is provided for viewing purposes only. No use, copying, modification, or distribution is permitted without explicit written permission from DhyanMedappa.*
